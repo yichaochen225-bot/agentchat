@@ -3,13 +3,18 @@
   "name": "agentchat",
   "description": "Multi-provider AI CDP bridge — Claude Code skills for free web AI agents",
   "dependencies": {
-    "playwright-core": "^1.61.0"
+    "playwright-core": "^1.61.0",
+    "@cloudflare/playwright": "^1.3.0"
   },
   "devDependencies": {
-    "jsdom": "^24.0.0"
+    "jsdom": "^24.0.0",
+    "wrangler": "^4.0.0"
   },
   "scripts": {
-    "test": "node test/run.js"
+    "test": "node test/run.js",
+    "cloud:dev": "wrangler dev",
+    "cloud:deploy": "wrangler deploy",
+    "cloud:check": "wrangler deploy --dry-run --outdir .wrangler-dry-run"
   },
   "engines": {
     "node": ">=18.0.0"
