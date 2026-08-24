@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AgentChat">
+  <title>AgentChat Cloud</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">AGENTCHAT CLOUD</div>
+        <h1>多模型 AI 调度台</h1>
+      </div>
+      <button class="icon-button" id="settingsButton" aria-label="设置">⚙</button>
+    </header>
+
+    <main>
+      <section class="hero-card">
+        <div class="status-row">
+          <span class="dot" id="healthDot"></span>
+          <span id="healthText">正在检查 Cloudflare 后端…</span>
+        </div>
+        <h2>今天想让 AgentChat 做什么？</h2>
+        <p>默认自动选择可用模型；复杂任务以后可升级为并行和 DAG。</p>
+      </section>
+
+      <section class="composer-card">
+        <textarea id="promptInput" rows="5" placeholder="输入任务，例如：分析这个项目的架构和安全问题"></textarea>
+        <div class="composer-footer">
+          <select id="providerSelect" aria-label="模型">
+            <option value="auto">自动选择</option>
+            <option value="gemini">Gemini</option>
+            <option value="claude">Claude</option>
+            <option value="deepseek">DeepSeek</option>
+          </select>
+          <button class="primary-button" id="sendButton">开始执行</button>
+        </div>
+      </section>
+
+      <section class="result-card hidden" id="resultCard">
+        <div class="result-head">
+          <div>
+            <span class="badge" id="resultProvider">Agent</span>
+            <span class="muted" id="resultMeta"></span>
+          </div>
+          <button class="text-button" id="copyButton">复制</button>
+        </div>
+        <pre id="resultText"></pre>
+      </section>
+
+      <section class="section-block">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">PROVIDERS</div>
+            <h3>AI 连接状态</h3>
+          </div>
+          <button class="text-button" id="refreshProviders">刷新</button>
+        </div>
+        <div class="provider-grid" id="providerGrid"></div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="主导航">
+      <button class="nav-item active">对话</button>
+      <button class="nav-item" disabled>任务</button>
+      <button class="nav-item" disabled>历史</button>
+    </nav>
+  </div>
+
+  <dialog id="settingsDialog">
+    <form method="dialog" class="dialog-card">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">SECURITY</div>
+          <h3>个人访问令牌</h3>
+        </div>
+        <button class="icon-button" value="cancel" aria-label="关闭">×</button>
+      </div>
+      <p class="muted">与 Cloudflare Secret <code>AGENTCHAT_API_TOKEN</code> 保持一致。仅保存在当前手机浏览器。</p>
+      <input id="tokenInput" type="password" autocomplete="off" placeholder="粘贴访问令牌">
+      <button class="primary-button full" id="saveTokenButton" value="cancel" type="button">保存到本机</button>
+      <button class="danger-button full" id="clearAuthButton" value="cancel" type="button">清除云端 AI 登录态</button>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
