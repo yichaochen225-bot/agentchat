@@ -1,6 +1,6 @@
 const $ = (selector) => document.querySelector(selector);
 const TOKEN_STORAGE_KEY = "agentchat_api_token";
-const state = { token: sessionStorage.getItem(TOKEN_STORAGE_KEY) || "", providers: [], providerStates: new Map() };
+const state = { token: sessionStorage.getItem(TOKEN_STORAGE_KEY) || "", providers: [], providerStates: new Map(), loginProvider: null };
 
 const elements = {
   settingsButton: $("#settingsButton"), settingsDialog: $("#settingsDialog"),
@@ -8,7 +8,11 @@ const elements = {
   healthDot: $("#healthDot"), healthText: $("#healthText"), promptInput: $("#promptInput"),
   providerSelect: $("#providerSelect"), sendButton: $("#sendButton"), resultCard: $("#resultCard"),
   resultProvider: $("#resultProvider"), resultMeta: $("#resultMeta"), resultText: $("#resultText"),
-  copyButton: $("#copyButton"), providerGrid: $("#providerGrid"), refreshProviders: $("#refreshProviders"), toast: $("#toast")
+  copyButton: $("#copyButton"), providerGrid: $("#providerGrid"), refreshProviders: $("#refreshProviders"), toast: $("#toast"),
+  loginHelperDialog: $("#loginHelperDialog"), loginHelperProvider: $("#loginHelperProvider"),
+  loginAccountInput: $("#loginAccountInput"), loginPasswordInput: $("#loginPasswordInput"), loginOtherInput: $("#loginOtherInput"),
+  fillAccountButton: $("#fillAccountButton"), fillPasswordButton: $("#fillPasswordButton"), fillFocusedButton: $("#fillFocusedButton"),
+  submitRemoteLoginButton: $("#submitRemoteLoginButton")
 };
 
 function toast(message) {
@@ -85,7 +89,7 @@ function renderProviders() {
     const current = state.providerStates.get(provider.key) || (provider.cloudEnabled ? "unknown" : "planned");
     const card = document.createElement("article");
     card.className = "provider-card";
-    card.innerHTML = `<div><div class="provider-name">${provider.name}</div><div class="provider-state">${provider.cloudEnabled ? stateLabel(current) : "计划后续接入"}</div></div><div class="provider-actions"><button class="small-button" data-action="check" data-provider="${provider.key}" ${provider.cloudEnabled ? "" : "disabled"}>检测</button><button class="small-button login" data-action="login" data-provider="${provider.key}" ${provider.cloudEnabled ? "" : "disabled"}>登录</button><button class="small-button" data-action="save" data-provider="${provider.key}" ${provider.cloudEnabled ? "" : "disabled"}>保存登录态</button></div>`;
+    card.innerHTML = `<div><div class="provider-name">${provider.name}</div><div class="provider-state">${provider.cloudEnabled ? stateLabel(current) : "计划后续接入"}</div></div><div class="provider-actions"><button class="small-button" data-action="check" data-provider="${provider.key}" ${provider.cloudEnabled ? "" : "disabled"}>检测</button><button class="small-button login" data-action="login" data-provider="${provider.key}" ${provider.cloudEnabled ? "" : "disabled"}>登录</button><button class="small-button" data-action="mobile" data-provider="${provider.key}" ${provider.cloudEnabled ? "" : "disabled"}>手机输入</button><button class="small-button" data-action="save" data-provider="${provider.key}" ${provider.cloudEnabled ? "" : "disabled"}>保存登录态</button></div>`;
     elements.providerGrid.appendChild(card);
   }
 }
@@ -118,10 +122,37 @@ async function openLogin(key) {
   try {
     const result = await api("/api/provider/live-view", { method: "POST", body: JSON.stringify({ provider: key }) });
     if (popup) popup.location.replace(result.liveViewUrl); else location.href = result.liveViewUrl;
-    toast(`已打开 ${key} Live View；完成网页登录后返回并点击“保存登录态”`);
+    toast(`已打开 ${key} Live View；iPhone 无法输入时返回并点“手机输入”`);
   } catch (error) {
     if (popup) popup.close();
     toast(authErrorMessage(error));
+  }
+}
+
+function openMobileLogin(key) {
+  if (!state.token) return requestToken();
+  const provider = state.providers.find((item) => item.key === key);
+  state.loginProvider = key;
+  elements.loginHelperProvider.textContent = provider?.name || key;
+  elements.loginAccountInput.value = "";
+  elements.loginPasswordInput.value = "";
+  elements.loginOtherInput.value = "";
+  elements.loginHelperDialog.showModal();
+}
+
+async function sendRemoteLoginAction(action, value) {
+  if (!state.token) return requestToken();
+  if (!state.loginProvider) return toast("请先选择 Provider");
+  try {
+    const result = await api("/api/provider/remote-input", {
+      method: "POST",
+      body: JSON.stringify({ provider: state.loginProvider, action, value })
+    });
+    toast(result.message || "已发送到远程登录页");
+    return result;
+  } catch (error) {
+    toast(authErrorMessage(error));
+    throw error;
   }
 }
 
@@ -191,18 +222,52 @@ elements.saveTokenButton.addEventListener("click", async () => {
     elements.saveTokenButton.textContent = "保存到本机";
   }
 });
+
 elements.clearAuthButton.addEventListener("click", async () => {
   if (!state.token) return requestToken();
   if (!confirm("确定清除 Cloudflare 中保存的 AI 登录态吗？")) return;
   try { await api("/api/provider/clear-auth", { method: "POST", body: "{}" }); state.providerStates.clear(); renderProviders(); toast("云端 AI 登录态已清除"); } catch (error) { toast(authErrorMessage(error)); }
 });
+
 elements.providerGrid.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]"); if (!button) return;
   const key = button.dataset.provider;
   if (button.dataset.action === "check") checkProvider(key);
   if (button.dataset.action === "login") openLogin(key);
+  if (button.dataset.action === "mobile") openMobileLogin(key);
   if (button.dataset.action === "save") saveLogin();
 });
+
+elements.fillAccountButton.addEventListener("click", async () => {
+  const value = elements.loginAccountInput.value;
+  if (!value) return toast("请先输入账号 / 邮箱 / 手机号");
+  await sendRemoteLoginAction("account", value).catch(() => {});
+});
+
+elements.fillPasswordButton.addEventListener("click", async () => {
+  const value = elements.loginPasswordInput.value;
+  if (!value) return toast("请先输入密码");
+  try {
+    await sendRemoteLoginAction("password", value);
+  } catch (_) {
+  } finally {
+    elements.loginPasswordInput.value = "";
+  }
+});
+
+elements.fillFocusedButton.addEventListener("click", async () => {
+  const value = elements.loginOtherInput.value;
+  if (!value) return toast("请先输入验证码或其他内容");
+  try {
+    await sendRemoteLoginAction("focused", value);
+    elements.loginOtherInput.value = "";
+  } catch (_) {}
+});
+
+elements.submitRemoteLoginButton.addEventListener("click", async () => {
+  await sendRemoteLoginAction("submit", "").catch(() => {});
+});
+
 elements.refreshProviders.addEventListener("click", refreshCloudProviders);
 elements.sendButton.addEventListener("click", sendPrompt);
 elements.copyButton.addEventListener("click", async () => { await navigator.clipboard.writeText(elements.resultText.textContent || ""); toast("已复制"); });
