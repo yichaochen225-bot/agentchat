@@ -91,6 +91,39 @@
     </form>
   </dialog>
 
+  <dialog id="loginHelperDialog">
+    <form method="dialog" class="dialog-card">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">MOBILE LOGIN</div>
+          <h3>手机登录助手 · <span id="loginHelperProvider">Provider</span></h3>
+        </div>
+        <button class="icon-button" value="cancel" aria-label="关闭">×</button>
+      </div>
+      <p class="muted">给 iPhone 的 Browser Run 登录页使用。这里输入的账号、密码或验证码只会发送到当前远程页面，不写入 AgentChat 存储；密码发送后会立即从本页清空。</p>
+
+      <label class="helper-label" for="loginAccountInput">账号 / 邮箱 / 手机号</label>
+      <div class="helper-row">
+        <input id="loginAccountInput" type="text" autocomplete="username" autocapitalize="none" placeholder="输入账号">
+        <button class="small-button helper-button" id="fillAccountButton" type="button">填入账号</button>
+      </div>
+
+      <label class="helper-label" for="loginPasswordInput">密码</label>
+      <div class="helper-row">
+        <input id="loginPasswordInput" type="password" autocomplete="current-password" placeholder="输入密码">
+        <button class="small-button helper-button" id="fillPasswordButton" type="button">填入密码</button>
+      </div>
+
+      <label class="helper-label" for="loginOtherInput">验证码 / 其他输入</label>
+      <div class="helper-row">
+        <input id="loginOtherInput" type="text" autocomplete="one-time-code" inputmode="text" placeholder="先在 Live View 点中目标输入框">
+        <button class="small-button helper-button" id="fillFocusedButton" type="button">输入到焦点</button>
+      </div>
+
+      <button class="primary-button full" id="submitRemoteLoginButton" type="button">点击远程登录 / 下一步</button>
+    </form>
+  </dialog>
+
   <div class="toast" id="toast" role="status"></div>
   <script type="module" src="/app.js"></script>
 </body>
