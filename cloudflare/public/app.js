@@ -1,5 +1,6 @@
 const $ = (selector) => document.querySelector(selector);
-const state = { token: "", providers: [], providerStates: new Map() };
+const TOKEN_STORAGE_KEY = "agentchat_api_token";
+const state = { token: sessionStorage.getItem(TOKEN_STORAGE_KEY) || "", providers: [], providerStates: new Map() };
 
 const elements = {
   settingsButton: $("#settingsButton"), settingsDialog: $("#settingsDialog"),
@@ -14,7 +15,7 @@ function toast(message) {
   elements.toast.textContent = message;
   elements.toast.classList.add("show");
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => elements.toast.classList.remove("show"), 2600);
+  toast.timer = setTimeout(() => elements.toast.classList.remove("show"), 3200);
 }
 
 async function api(path, options = {}) {
@@ -36,7 +37,25 @@ async function api(path, options = {}) {
 function requestToken() {
   elements.tokenInput.value = state.token;
   elements.settingsDialog.showModal();
-  toast("先输入本次会话的个人访问令牌");
+  toast("先输入 AgentChat 个人访问令牌");
+}
+
+function authErrorMessage(error) {
+  if (error.status === 401 || error.code === "UNAUTHORIZED") {
+    return "AgentChat 访问令牌未通过验证；这不是 DeepSeek 账号或密码错误";
+  }
+  return error.message;
+}
+
+async function verifyCurrentToken() {
+  if (!state.token) return false;
+  try {
+    await api("/api/browser/status");
+    return true;
+  } catch (error) {
+    if (error.status === 401 || error.code === "UNAUTHORIZED") return false;
+    throw error;
+  }
 }
 
 async function checkHealth() {
@@ -78,19 +97,31 @@ async function checkProvider(key) {
     const result = await api("/api/provider/status", { method: "POST", body: JSON.stringify({ provider: key }) });
     state.providerStates.set(key, result.state); renderProviders(); toast(`${key}: ${stateLabel(result.state)}`);
   } catch (error) {
-    state.providerStates.set(key, "error"); renderProviders(); toast(error.status === 401 ? "访问令牌不正确" : error.message);
+    state.providerStates.set(key, "error"); renderProviders(); toast(authErrorMessage(error));
   }
 }
 
 async function openLogin(key) {
   if (!state.token) return requestToken();
+
+  try {
+    const valid = await verifyCurrentToken();
+    if (!valid) {
+      requestToken();
+      return toast("AgentChat 访问令牌未通过验证；请先重新保存令牌");
+    }
+  } catch (error) {
+    return toast(error.message);
+  }
+
   const popup = window.open("about:blank", "_blank");
   try {
     const result = await api("/api/provider/live-view", { method: "POST", body: JSON.stringify({ provider: key }) });
     if (popup) popup.location.replace(result.liveViewUrl); else location.href = result.liveViewUrl;
-    toast("完成登录后返回这里，点击“保存登录态”");
+    toast(`已打开 ${key} Live View；完成网页登录后返回并点击“保存登录态”`);
   } catch (error) {
-    if (popup) popup.close(); toast(error.status === 401 ? "访问令牌不正确" : error.message);
+    if (popup) popup.close();
+    toast(authErrorMessage(error));
   }
 }
 
@@ -99,7 +130,7 @@ async function saveLogin() {
   try {
     const result = await api("/api/provider/save-auth", { method: "POST", body: "{}" });
     toast(`登录态已加密保存：${result.cookies} 个 Cookie`);
-  } catch (error) { toast(error.message); }
+  } catch (error) { toast(authErrorMessage(error)); }
 }
 
 async function refreshCloudProviders() {
@@ -122,18 +153,48 @@ async function sendPrompt() {
     elements.resultText.textContent = result.response || "没有返回文本";
   } catch (error) {
     elements.resultProvider.textContent = error.code || "ERROR"; elements.resultMeta.textContent = "执行失败";
-    if (error.code === "AUTH_REQUIRED") elements.resultText.textContent = "对应 Provider 需要登录。请在下方点击“登录”。";
+    if (error.status === 401 || error.code === "UNAUTHORIZED") elements.resultText.textContent = "AgentChat 访问令牌未通过验证。请打开设置重新保存令牌；这不是 AI Provider 的登录错误。";
+    else if (error.code === "AUTH_REQUIRED") elements.resultText.textContent = "对应 Provider 需要登录。请在下方点击“登录”。";
     else if (error.code === "ALL_PROVIDERS_FAILED") elements.resultText.textContent = ["自动模式的 Provider 都失败了：", ...(Array.isArray(error.details) ? error.details : []).map((x) => `• ${x.provider}: ${x.code} — ${x.error}`)].join("\n");
     else elements.resultText.textContent = error.message;
   } finally { elements.sendButton.disabled = false; elements.sendButton.textContent = "开始执行"; }
 }
 
 elements.settingsButton.addEventListener("click", () => { elements.tokenInput.value = state.token; elements.settingsDialog.showModal(); });
-elements.saveTokenButton.addEventListener("click", () => { state.token = elements.tokenInput.value.trim(); elements.settingsDialog.close(); toast(state.token ? "访问令牌仅保存在当前页面内存中" : "访问令牌已清除"); });
+elements.saveTokenButton.addEventListener("click", async () => {
+  const candidate = elements.tokenInput.value.trim();
+  if (!candidate) {
+    state.token = "";
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    toast("访问令牌已清除");
+    return;
+  }
+
+  const previous = state.token;
+  state.token = candidate;
+  elements.saveTokenButton.disabled = true;
+  elements.saveTokenButton.textContent = "正在验证…";
+  try {
+    const valid = await verifyCurrentToken();
+    if (!valid) {
+      state.token = previous;
+      return toast("令牌不匹配：请确认与 Cloudflare 的 AGENTCHAT_API_TOKEN 完全一致");
+    }
+    sessionStorage.setItem(TOKEN_STORAGE_KEY, candidate);
+    elements.settingsDialog.close();
+    toast("AgentChat 访问令牌验证成功");
+  } catch (error) {
+    state.token = previous;
+    toast(error.message);
+  } finally {
+    elements.saveTokenButton.disabled = false;
+    elements.saveTokenButton.textContent = "保存到本机";
+  }
+});
 elements.clearAuthButton.addEventListener("click", async () => {
   if (!state.token) return requestToken();
   if (!confirm("确定清除 Cloudflare 中保存的 AI 登录态吗？")) return;
-  try { await api("/api/provider/clear-auth", { method: "POST", body: "{}" }); state.providerStates.clear(); renderProviders(); toast("云端 AI 登录态已清除"); } catch (error) { toast(error.message); }
+  try { await api("/api/provider/clear-auth", { method: "POST", body: "{}" }); state.providerStates.clear(); renderProviders(); toast("云端 AI 登录态已清除"); } catch (error) { toast(authErrorMessage(error)); }
 });
 elements.providerGrid.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]"); if (!button) return;
