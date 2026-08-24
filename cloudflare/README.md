@@ -55,7 +55,7 @@ npm run deploy
 After deployment:
 
 1. Open the Worker URL on iPhone Safari.
-2. Open Settings and enter the same value used for `AGENTCHAT_API_TOKEN`.
+2. Open Settings and enter the same value used for `AGENTCHAT_API_TOKEN` for the current page session.
 3. Under Providers, tap **登录** for Gemini / Claude / DeepSeek.
 4. Complete login in Cloudflare Live View.
 5. Return to AgentChat and tap **保存登录态**.
@@ -67,7 +67,7 @@ After deployment:
 - Provider account passwords are never stored by AgentChat Cloud.
 - Browser authentication state is serialized with Playwright `storageState`, encrypted with AES-256-GCM using a key derived from the `AUTH_STATE_KEY` Worker secret, and stored inside the user's Durable Object storage.
 - Browser-consuming endpoints require `Authorization: Bearer <AGENTCHAT_API_TOKEN>`.
-- The token is currently stored in the PWA's localStorage for this personal-use prototype. A production multi-user version should replace this with Cloudflare Access / OAuth and per-user Durable Objects.
+- The PWA keeps the bearer token only in JavaScript memory for this prototype; refreshing or reopening the page requires entering it again. A production version should replace this with Cloudflare Access / OAuth and per-user Durable Objects.
 - CAPTCHA/MFA is not bypassed. Use Live View for manual intervention.
 - Session recording is not enabled.
 
