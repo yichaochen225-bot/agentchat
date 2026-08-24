@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "agentchat-cloud",
+  "main": "cloudflare/src/index.js",
+  "compatibility_date": "2026-08-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "assets": {
+    "directory": "./cloudflare/public",
+    "binding": "ASSETS"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "AGENTCHAT_BROWSER",
+        "class_name": "AgentChatBrowser"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["AgentChatBrowser"]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
