@@ -55,6 +55,36 @@ async function proxyToBrowser(request, env, internalPath) {
   }));
 }
 
+async function fillFirstVisible(page, selectors, value) {
+  for (const selector of selectors) {
+    const locator = page.locator(selector);
+    const count = Math.min(await locator.count().catch(() => 0), 6);
+    for (let index = 0; index < count; index += 1) {
+      const candidate = locator.nth(index);
+      const visible = await candidate.isVisible().catch(() => false);
+      if (!visible) continue;
+      await candidate.fill(value, { timeout: 5000 });
+      return true;
+    }
+  }
+  return false;
+}
+
+async function clickFirstVisible(page, selectors) {
+  for (const selector of selectors) {
+    const locator = page.locator(selector);
+    const count = Math.min(await locator.count().catch(() => 0), 6);
+    for (let index = 0; index < count; index += 1) {
+      const candidate = locator.nth(index);
+      const visible = await candidate.isVisible().catch(() => false);
+      if (!visible) continue;
+      await candidate.click({ timeout: 5000 });
+      return true;
+    }
+  }
+  return false;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -64,7 +94,7 @@ export default {
       return json({
         ok: true,
         service: "agentchat-cloud",
-        version: "0.1.0",
+        version: "0.1.1",
         runtime: "cloudflare-browser-run",
         configured: missing.length === 0,
         missing
@@ -82,6 +112,7 @@ export default {
         ["/api/browser/status", "/status"],
         ["/api/provider/status", "/provider-status"],
         ["/api/provider/live-view", "/live-view"],
+        ["/api/provider/remote-input", "/remote-input"],
         ["/api/provider/save-auth", "/save-auth"],
         ["/api/provider/clear-auth", "/clear-auth"],
         ["/api/ask", "/ask"]
@@ -137,6 +168,14 @@ export class AgentChatBrowser extends DurableObject {
     return page;
   }
 
+  async ensureProviderPage(provider) {
+    const page = await this.providerPage(provider);
+    if (!page.url() || page.url() === "about:blank") {
+      await page.goto(provider.url, { waitUntil: "domcontentloaded", timeout: 45000 });
+    }
+    return page;
+  }
+
   async persistAuthState() {
     const context = await this.ensureContext();
     const storageState = await context.storageState({ indexedDB: true });
@@ -172,10 +211,7 @@ export class AgentChatBrowser extends DurableObject {
   }
 
   async liveView(provider) {
-    const page = await this.providerPage(provider);
-    if (!page.url() || page.url() === "about:blank") {
-      await page.goto(provider.url, { waitUntil: "domcontentloaded", timeout: 45000 });
-    }
+    const page = await this.ensureProviderPage(provider);
     const cdp = await page.context().newCDPSession(page);
     const { devtoolsFrontendUrl } = await cdp.send("Cloudflare.getLiveView", {
       mode: "tab",
@@ -186,8 +222,90 @@ export class AgentChatBrowser extends DurableObject {
       provider: provider.key,
       liveViewUrl: devtoolsFrontendUrl,
       expiresInMs: 10 * 60 * 1000,
-      instructions: `请在 Live View 中完成 ${provider.name} 登录，然后回到 AgentChat 点击“保存登录态”。`
+      instructions: `请在 Live View 中完成 ${provider.name} 登录；iPhone 无法弹出键盘时，返回 AgentChat 使用“手机输入”。`
     };
+  }
+
+  async remoteInput(provider, action, value) {
+    const page = await this.ensureProviderPage(provider);
+
+    if (action === "account") {
+      const ok = await fillFirstVisible(page, [
+        'input[placeholder*="Phone number"]',
+        'input[placeholder*="email address"]',
+        'input[placeholder*="Email"]',
+        'input[type="email"]',
+        'input[type="tel"]',
+        'input[name*="email"]',
+        'input[name*="phone"]',
+        'input[type="text"]'
+      ], String(value || ""));
+      if (!ok) {
+        const error = new Error("找不到可见的账号输入框。请先在 Live View 打开登录页面。");
+        error.code = "LOGIN_FIELD_NOT_FOUND";
+        throw error;
+      }
+      return { ok: true, provider: provider.key, action, message: "账号已填入远程页面" };
+    }
+
+    if (action === "password") {
+      const password = String(value || "");
+      if (!password) {
+        const error = new Error("密码不能为空");
+        error.code = "INVALID_LOGIN_INPUT";
+        throw error;
+      }
+      const ok = await fillFirstVisible(page, [
+        'input[type="password"]',
+        'input[autocomplete="current-password"]'
+      ], password);
+      if (!ok) {
+        const error = new Error("找不到可见的密码输入框。若页面分两步登录，请先提交账号进入密码页。");
+        error.code = "LOGIN_FIELD_NOT_FOUND";
+        throw error;
+      }
+      return { ok: true, provider: provider.key, action, message: "密码已填入远程页面；AgentChat 未保存密码" };
+    }
+
+    if (action === "focused") {
+      const text = String(value || "");
+      if (!text) {
+        const error = new Error("输入内容不能为空");
+        error.code = "INVALID_LOGIN_INPUT";
+        throw error;
+      }
+      const editable = await page.evaluate(() => {
+        const element = document.activeElement;
+        if (!element) return false;
+        const tag = element.tagName?.toLowerCase();
+        return tag === "input" || tag === "textarea" || element.getAttribute?.("contenteditable") === "true";
+      }).catch(() => false);
+      if (!editable) {
+        const error = new Error("远程页面当前没有选中输入框。请先在 Live View 点一下验证码或目标输入框，再返回这里发送。");
+        error.code = "REMOTE_FIELD_NOT_FOCUSED";
+        throw error;
+      }
+      await page.keyboard.insertText(text);
+      return { ok: true, provider: provider.key, action, message: "内容已输入到远程当前焦点" };
+    }
+
+    if (action === "submit") {
+      const clicked = await clickFirstVisible(page, [
+        'button:has-text("Log in")',
+        'button:has-text("Login")',
+        'button:has-text("Next")',
+        'button:has-text("Continue")',
+        'button[type="submit"]',
+        '[role="button"]:has-text("Log in")',
+        '[role="button"]:has-text("Next")'
+      ]);
+      if (!clicked) await page.keyboard.press("Enter");
+      return { ok: true, provider: provider.key, action, message: "已提交远程登录 / 下一步" };
+    }
+
+    const error = new Error("Unsupported remote input action");
+    error.code = "INVALID_LOGIN_ACTION";
+    throw error;
   }
 
   async askOne(provider, prompt) {
@@ -234,6 +352,11 @@ export class AgentChatBrowser extends DurableObject {
       if (url.pathname === "/live-view" && request.method === "POST") {
         if (!provider || !provider.cloudEnabled) return json({ error: "Provider is not enabled in Cloud v0.1", code: "PROVIDER_NOT_ENABLED" }, 400);
         return json(await this.liveView(provider));
+      }
+
+      if (url.pathname === "/remote-input" && request.method === "POST") {
+        if (!provider || !provider.cloudEnabled) return json({ error: "Provider is not enabled in Cloud v0.1", code: "PROVIDER_NOT_ENABLED" }, 400);
+        return json(await this.remoteInput(provider, String(body.action || ""), body.value));
       }
 
       if (url.pathname === "/save-auth" && request.method === "POST") {
