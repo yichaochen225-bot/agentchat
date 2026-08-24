@@ -27,16 +27,18 @@ function serializeError(error) {
 }
 
 function isAuthorized(request, env) {
-  const expected = env.AGENTCHAT_API_TOKEN;
+  const expected = String(env.AGENTCHAT_API_TOKEN || "").trim();
   if (!expected) return false;
   const header = request.headers.get("authorization") || "";
-  return header === `Bearer ${expected}`;
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  const provided = String(match?.[1] || "").trim();
+  return provided === expected;
 }
 
 function requireConfiguredSecrets(env) {
   const missing = [];
-  if (!env.AGENTCHAT_API_TOKEN) missing.push("AGENTCHAT_API_TOKEN");
-  if (!env.AUTH_STATE_KEY) missing.push("AUTH_STATE_KEY");
+  if (!String(env.AGENTCHAT_API_TOKEN || "").trim()) missing.push("AGENTCHAT_API_TOKEN");
+  if (!String(env.AUTH_STATE_KEY || "").trim()) missing.push("AUTH_STATE_KEY");
   return missing;
 }
 
