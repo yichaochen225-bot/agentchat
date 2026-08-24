@@ -4,16 +4,30 @@ on:
   pull_request:
     paths:
       - "cloudflare/**"
+      - "wrangler.jsonc"
+      - "package.json"
       - ".github/workflows/cloudflare-check.yml"
   push:
     branches:
       - agentchat-cloud
     paths:
       - "cloudflare/**"
+      - "wrangler.jsonc"
+      - "package.json"
       - ".github/workflows/cloudflare-check.yml"
 
 jobs:
-  dry-run:
+  root-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm run cloud:check
+
+  nested-dry-run:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -23,7 +37,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: cloudflare/package.json
       - run: npm install
       - run: npm run check
