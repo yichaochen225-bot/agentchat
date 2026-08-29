@@ -67,6 +67,15 @@ Use `AGENTCHAT_API_TOKEN` for the browser dashboard and `AUTH_STATE_KEY` as a lo
 
 After deployment, open the Worker URL, enter the dashboard token in Settings, tap **一键准备 Google 授权**, then open the prepared Gemini, Claude, and DeepSeek pages in order. Complete the first Google login yourself; the other pages reuse the same Google browser session when possible. Finish any provider-specific consent/MFA, then tap **保存登录态** and **检测**.
 
+### Automatic GitHub deployment
+
+The repository includes `.github/workflows/cloudflare-deploy.yml`. Every push to `master` that changes `cloudflare/` runs the tests and then executes `npx wrangler deploy`, which publishes directly to production traffic. Add these GitHub repository secrets before relying on the workflow:
+
+- `CLOUDFLARE_API_TOKEN`: a Cloudflare API Token with permission to edit Workers and deploy versions.
+- `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account ID that owns `agentchat-cloud`.
+
+If the repository is also connected through Cloudflare Workers Builds, change its deploy command from `npx wrangler versions upload` to `npx wrangler deploy` (or disable that duplicate build). `versions upload` only stages a version and does not send traffic to it.
+
 ## ChatGPT App / MCP connection
 
 The repository now contains an MCP Apps-compatible scaffold:
