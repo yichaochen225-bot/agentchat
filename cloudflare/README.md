@@ -26,6 +26,7 @@ Cloudflare Browser Run / Playwright
 - Added auto and parallel compare modes for Gemini, Claude, and DeepSeek.
 - Added local-only history and copy/clear result actions.
 - Improved mobile navigation and connection/authorization status cards.
+- Added a batch Google authorization helper that prepares all three Live View pages in one shared browser context.
 - Kept login user-controlled: the user completes login, password, CAPTCHA, and MFA in Cloudflare Live View; AgentChat only stores the encrypted browser session state.
 - Added a token-protected `/mcp` endpoint and an MCP Apps-compatible result widget for a private ChatGPT Developer Mode connection.
 
@@ -64,7 +65,7 @@ npm run deploy
 
 Use `AGENTCHAT_API_TOKEN` for the browser dashboard and `AUTH_STATE_KEY` as a long random secret for encrypted browser state. `MCP_API_TOKEN` is separate from both and is intended for MCP Inspector or other controlled server-to-server calls; keep it private.
 
-After deployment, open the Worker URL, enter the dashboard token in Settings, use each Provider's **登录** button, complete the login in Live View, then tap **保存登录态** and **检测**.
+After deployment, open the Worker URL, enter the dashboard token in Settings, tap **一键准备 Google 授权**, then open the prepared Gemini, Claude, and DeepSeek pages in order. Complete the first Google login yourself; the other pages reuse the same Google browser session when possible. Finish any provider-specific consent/MFA, then tap **保存登录态** and **检测**.
 
 ## ChatGPT App / MCP connection
 

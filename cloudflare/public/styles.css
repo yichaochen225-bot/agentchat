@@ -506,6 +506,26 @@ pre {
   line-height: 1.55;
 }
 
+.batch-login-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.batch-login-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.batch-login-link {
+  display: inline-flex;
+  text-decoration: none;
+}
+
 .provider-grid {
   display: grid;
   gap: 10px;

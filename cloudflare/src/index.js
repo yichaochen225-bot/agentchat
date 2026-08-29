@@ -118,31 +118,41 @@ async function proxyToBrowser(request, env, internalPath) {
   }));
 }
 
+function pageFrames(page) {
+  return typeof page.frames === "function" ? page.frames() : [page];
+}
+
 async function fillFirstVisible(page, selectors, value) {
-  for (const selector of selectors) {
-    const locator = page.locator(selector);
-    const count = Math.min(await locator.count().catch(() => 0), 6);
-    for (let index = 0; index < count; index += 1) {
-      const candidate = locator.nth(index);
-      const visible = await candidate.isVisible().catch(() => false);
-      if (!visible) continue;
-      await candidate.fill(value, { timeout: 5000 });
-      return true;
+  for (const frame of pageFrames(page)) {
+    for (const selector of selectors) {
+      const locator = frame.locator(selector);
+      const count = Math.min(await locator.count().catch(() => 0), 8);
+      for (let index = 0; index < count; index += 1) {
+        const candidate = locator.nth(index);
+        const visible = await candidate.isVisible().catch(() => false);
+        if (!visible) continue;
+        await candidate.scrollIntoViewIfNeeded().catch(() => {});
+        await candidate.fill(value, { timeout: 7000 });
+        return true;
+      }
     }
   }
   return false;
 }
 
 async function clickFirstVisible(page, selectors) {
-  for (const selector of selectors) {
-    const locator = page.locator(selector);
-    const count = Math.min(await locator.count().catch(() => 0), 6);
-    for (let index = 0; index < count; index += 1) {
-      const candidate = locator.nth(index);
-      const visible = await candidate.isVisible().catch(() => false);
-      if (!visible) continue;
-      await candidate.click({ timeout: 5000 });
-      return true;
+  for (const frame of pageFrames(page)) {
+    for (const selector of selectors) {
+      const locator = frame.locator(selector);
+      const count = Math.min(await locator.count().catch(() => 0), 8);
+      for (let index = 0; index < count; index += 1) {
+        const candidate = locator.nth(index);
+        const visible = await candidate.isVisible().catch(() => false);
+        if (!visible) continue;
+        await candidate.scrollIntoViewIfNeeded().catch(() => {});
+        await candidate.click({ timeout: 7000 });
+        return true;
+      }
     }
   }
   return false;
@@ -180,6 +190,7 @@ export default {
         ["/api/browser/status", "/status"],
         ["/api/provider/status", "/provider-status"],
         ["/api/provider/live-view", "/live-view"],
+        ["/api/provider/batch-live-view", "/batch-live-view"],
         ["/api/provider/remote-input", "/remote-input"],
         ["/api/provider/save-auth", "/save-auth"],
         ["/api/provider/clear-auth", "/clear-auth"],
@@ -333,21 +344,54 @@ export class AgentChatBrowser extends DurableObject {
     };
   }
 
+  async batchLiveView(providerKeys) {
+    const providers = resolveCompareProviders(providerKeys);
+    const sessions = [];
+
+    for (const provider of providers) {
+      try {
+        sessions.push({ ok: true, ...(await this.liveView(provider)) });
+      } catch (error) {
+        sessions.push({
+          ok: false,
+          provider: provider.key,
+          code: error?.code || "INTERNAL_ERROR",
+          error: error?.message || String(error)
+        });
+      }
+    }
+
+    return {
+      mode: "batch-login",
+      sharedBrowserContext: true,
+      instructions: "请先完成一个 Google 登录，再依次打开其他 Provider 的授权页；它们共用同一个浏览器会话。",
+      sessions,
+      successCount: sessions.filter((session) => session.ok).length,
+      totalCount: sessions.length
+    };
+  }
+
   async remoteInput(provider, action, value) {
     const page = await this.ensureProviderPage(provider);
 
     if (action === "account") {
       const ok = await fillFirstVisible(page, [
+        'input[autocomplete="username"]',
+        'input[autocomplete="email"]',
         'input[placeholder*="Phone number"]',
         'input[placeholder*="email address"]',
+        'input[placeholder*="邮箱"]',
+        'input[placeholder*="账号"]',
+        'input[placeholder*="手机号"]',
         'input[placeholder*="Email"]',
         'input[type="email"]',
         'input[type="tel"]',
         'input[name*="email"]',
         'input[name*="phone"]',
-        'input[type="text"]'
+        'input[name*="username"]',
+        'input:not([type="hidden"]):not([type="password"])'
       ], String(value || ""));
-      if (!ok) throw createError("找不到可见的账号输入框。请先在 Live View 打开登录页面。", "LOGIN_FIELD_NOT_FOUND");
+      if (!ok) throw createError("找不到可见的账号输入框。请先等待登录页加载完成，再点“填入账号”。", "LOGIN_FIELD_NOT_FOUND");
       return { ok: true, provider: provider.key, action, message: "账号已填入远程页面" };
     }
 
@@ -356,10 +400,13 @@ export class AgentChatBrowser extends DurableObject {
       if (!password) throw createError("密码不能为空", "INVALID_LOGIN_INPUT");
       const ok = await fillFirstVisible(page, [
         'input[type="password"]',
-        'input[autocomplete="current-password"]'
+        'input[autocomplete="current-password"]',
+        'input[autocomplete="password"]',
+        'input[name="password"]',
+        'input[name*="password"]'
       ], password);
       if (!ok) {
-        throw createError("找不到可见的密码输入框。若页面分两步登录，请先提交账号进入密码页。", "LOGIN_FIELD_NOT_FOUND");
+        throw createError("找不到可见的密码输入框。若页面分两步登录，请先提交账号进入密码页，再点“填入密码”。", "LOGIN_FIELD_NOT_FOUND");
       }
       return { ok: true, provider: provider.key, action, message: "密码已填入远程页面；AgentChat 未保存密码" };
     }
@@ -367,12 +414,13 @@ export class AgentChatBrowser extends DurableObject {
     if (action === "focused") {
       const text = String(value || "");
       if (!text) throw createError("输入内容不能为空", "INVALID_LOGIN_INPUT");
-      const editable = await page.evaluate(() => {
+      const editableStates = await Promise.all(pageFrames(page).map((frame) => frame.evaluate(() => {
         const element = document.activeElement;
         if (!element) return false;
         const tag = element.tagName?.toLowerCase();
         return tag === "input" || tag === "textarea" || element.getAttribute?.("contenteditable") === "true";
-      }).catch(() => false);
+      }).catch(() => false)));
+      const editable = editableStates.some(Boolean);
       if (!editable) {
         throw createError("远程页面当前没有选中输入框。请先在 Live View 点一下验证码或目标输入框，再返回这里发送。", "REMOTE_FIELD_NOT_FOCUSED");
       }
@@ -489,6 +537,10 @@ export class AgentChatBrowser extends DurableObject {
           return json({ error: "Provider is not enabled in Cloud v0.2", code: "PROVIDER_NOT_ENABLED" }, 400);
         }
         return json(await this.liveView(provider));
+      }
+
+      if (url.pathname === "/batch-live-view" && request.method === "POST") {
+        return json(await this.batchLiveView(body.providers));
       }
 
       if (url.pathname === "/remote-input" && request.method === "POST") {

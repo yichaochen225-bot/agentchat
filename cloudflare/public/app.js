@@ -47,10 +47,13 @@ const elements = {
   clearResultButton: $("#clearResultButton"),
   providerGrid: $("#providerGrid"),
   refreshProviders: $("#refreshProviders"),
+  batchLoginButton: $("#batchLoginButton"),
+  batchLoginLinks: $("#batchLoginLinks"),
   historyList: $("#historyList"),
   clearHistoryButton: $("#clearHistoryButton"),
   loginHelperDialog: $("#loginHelperDialog"),
   loginHelperProvider: $("#loginHelperProvider"),
+  loginHelperStatus: $("#loginHelperStatus"),
   loginAccountInput: $("#loginAccountInput"),
   loginPasswordInput: $("#loginPasswordInput"),
   loginOtherInput: $("#loginOtherInput"),
@@ -645,6 +648,62 @@ async function openLogin(key) {
   }
 }
 
+function renderBatchLoginLinks(sessions) {
+  elements.batchLoginLinks.replaceChildren();
+  const validSessions = sessions.filter((session) => session.ok && session.liveViewUrl);
+  if (!validSessions.length) {
+    elements.batchLoginLinks.classList.add("hidden");
+    return;
+  }
+
+  for (const session of sessions) {
+    const item = document.createElement(session.ok && session.liveViewUrl ? "a" : "span");
+    item.className = "small-button batch-login-link";
+    item.textContent = session.ok
+      ? "打开 " + providerName(session.provider) + " 授权页"
+      : providerName(session.provider) + "：准备失败";
+    if (session.ok && session.liveViewUrl) {
+      item.href = session.liveViewUrl;
+      item.target = "_blank";
+      item.rel = "noopener noreferrer";
+    } else {
+      item.title = session.error || "无法创建 Live View";
+    }
+    elements.batchLoginLinks.appendChild(item);
+  }
+  elements.batchLoginLinks.classList.remove("hidden");
+}
+
+async function prepareBatchLogin() {
+  if (!state.token) {
+    requestToken();
+    return;
+  }
+
+  const providers = state.providers.filter((provider) => provider.cloudEnabled).map((provider) => provider.key);
+  if (!providers.length) {
+    toast("暂无可授权的云端 Provider");
+    return;
+  }
+
+  elements.batchLoginButton.disabled = true;
+  elements.batchLoginButton.textContent = "正在准备…";
+  try {
+    const result = await api("/api/provider/batch-live-view", {
+      method: "POST",
+      body: JSON.stringify({ providers })
+    });
+    renderBatchLoginLinks(Array.isArray(result.sessions) ? result.sessions : []);
+    toast("已准备 " + String(result.successCount || 0) + " 个授权页；请按顺序打开并完成 Google 授权");
+  } catch (error) {
+    elements.batchLoginLinks.classList.add("hidden");
+    toast(apiErrorMessage(error));
+  } finally {
+    elements.batchLoginButton.disabled = false;
+    elements.batchLoginButton.textContent = "重新准备 Google 授权";
+  }
+}
+
 function openMobileLogin(key) {
   if (!state.token) {
     requestToken();
@@ -653,6 +712,7 @@ function openMobileLogin(key) {
 
   state.loginProvider = key;
   elements.loginHelperProvider.textContent = providerName(key);
+  elements.loginHelperStatus.textContent = "请在 Live View 打开登录页；提交后这里会显示远程输入结果";
   elements.loginAccountInput.value = "";
   elements.loginPasswordInput.value = "";
   elements.loginOtherInput.value = "";
@@ -674,9 +734,11 @@ async function sendRemoteLoginAction(action, value) {
       method: "POST",
       body: JSON.stringify({ provider: state.loginProvider, action, value })
     });
+    elements.loginHelperStatus.textContent = result.message || "远程页面已更新";
     toast(result.message || "已发送到远程登录页");
     return result;
   } catch (error) {
+    elements.loginHelperStatus.textContent = apiErrorMessage(error);
     toast(apiErrorMessage(error));
     throw error;
   }
@@ -911,6 +973,7 @@ elements.promptInput.addEventListener("keydown", (event) => {
 });
 
 elements.refreshProviders.addEventListener("click", refreshCloudProviders);
+elements.batchLoginButton.addEventListener("click", prepareBatchLogin);
 elements.sendButton.addEventListener("click", sendPrompt);
 elements.copyAllButton.addEventListener("click", () => copyText(state.lastResultText));
 elements.clearResultButton.addEventListener("click", () => {
@@ -947,4 +1010,3 @@ updateStats();
 setMode("auto");
 updatePromptCount();
 await Promise.all([checkHealth(), loadProvidersSafe()]);
-
