@@ -62,20 +62,20 @@ npx wrangler secret put MCP_API_TOKEN
 npm run deploy
 ```
 
-Use `AGENTCHAT_API_TOKEN` for the browser dashboard and `AUTH_STATE_KEY` as a long random secret for encrypted browser state. `MCP_API_TOKEN` is separate from both; keep it private and pass it as a Bearer token when configuring a private MCP connector.
+Use `AGENTCHAT_API_TOKEN` for the browser dashboard and `AUTH_STATE_KEY` as a long random secret for encrypted browser state. `MCP_API_TOKEN` is separate from both and is intended for MCP Inspector or other controlled server-to-server calls; keep it private.
 
 After deployment, open the Worker URL, enter the dashboard token in Settings, use each Provider's **登录** button, complete the login in Live View, then tap **保存登录态** and **检测**.
 
 ## ChatGPT App / MCP connection
 
-The repository now contains a developer-mode MCP scaffold:
+The repository now contains an MCP Apps-compatible scaffold:
 
 - endpoint: `POST /mcp`
 - UI resource: `ui://agentchat/result/v1.html`
 - tools: list providers, run one AI, compare multiple AIs, and open a manual authorization page
 - widget: `/mcp-widget.html`
 
-The endpoint is intentionally token-protected and stateless for a personal prototype. Before a public ChatGPT App launch, replace the simple shared token and JSON-RPC handler with OAuth 2.1 and a production Streamable HTTP MCP transport, then configure the HTTPS public endpoint in ChatGPT Developer Mode.
+The endpoint is intentionally token-protected and stateless for a personal prototype. ChatGPT does not accept a custom static API key, so this endpoint is not a one-click ChatGPT connection yet. For personal development, connect it through Secure MCP Tunnel; for a public ChatGPT App, replace the shared token with OAuth 2.1 and use a production Streamable HTTP MCP transport before adding the HTTPS endpoint in ChatGPT Developer Mode.
 
 When `agentchat_open_login` is used, the user must finish the login flow themselves. Do not send passwords, verification codes, cookies, or API keys to the MCP tool.
 
