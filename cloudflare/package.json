@@ -1,13 +1,14 @@
 {
   "name": "agentchat-cloud",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Mobile-first Cloudflare Browser Run frontend for AgentChat",
+  "description": "Mobile-first Cloudflare Browser Run, multi-AI comparison, and ChatGPT App endpoint for AgentChat",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "check": "wrangler deploy --dry-run --outdir .wrangler-dry-run"
+    "test": "node --test",
+    "check": "node --check src/index.js && node --check src/mcp.js && node --check src/providers.js && node --check src/runner.js && node --check public/app.js && npm test && wrangler deploy --dry-run --outdir .wrangler-dry-run"
   },
   "dependencies": {
     "@cloudflare/playwright": "^1.3.0"

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentChat 结果</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --text: #171923;
+      --muted: #6f7482;
+      --line: rgba(20, 24, 38, .12);
+      --panel: #f7f8fb;
+      --good: #14865b;
+      --bad: #bf3f50;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --text: #f4f5fa; --muted: #a6adbc; --line: rgba(255,255,255,.12); --panel: #1a1e28; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 14px; color: var(--text); background: transparent; }
+    .shell { display: grid; gap: 10px; }
+    .eyebrow { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .14em; }
+    h1 { margin: 3px 0 0; font-size: 18px; }
+    .summary { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .results { display: grid; gap: 8px; }
+    .result { border: 1px solid var(--line); border-radius: 14px; padding: 11px; background: var(--panel); }
+    .result-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+    .meta { color: var(--muted); font-size: 11px; }
+    pre { margin: 9px 0 0; white-space: pre-wrap; word-break: break-word; font: 13px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .success { color: var(--good); }
+    .error { color: var(--bad); }
+    .empty { padding: 18px; color: var(--muted); text-align: center; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <section class="shell" aria-live="polite">
+    <div>
+      <div class="eyebrow">AGENTCHAT CLOUD</div>
+      <h1>多 AI 执行结果</h1>
+    </div>
+    <div class="summary" id="summary">等待工具结果…</div>
+    <div class="results" id="results"></div>
+  </section>
+  <script>
+    const summary = document.getElementById("summary");
+    const results = document.getElementById("results");
+
+    function outputFromHost() {
+      return window.openai && window.openai.toolOutput ? window.openai.toolOutput : null;
+    }
+
+    function render(output) {
+      results.replaceChildren();
+      if (!output) {
+        summary.textContent = "等待 AgentChat 返回结果…";
+        return;
+      }
+
+      if (output.mode === "single") {
+        summary.textContent = "Provider：" + (output.provider || "auto");
+        const item = document.createElement("article");
+        item.className = "result";
+        const head = document.createElement("div");
+        head.className = "result-head";
+        const title = document.createElement("strong");
+        title.textContent = output.provider || "AgentChat";
+        const meta = document.createElement("span");
+        meta.className = "meta success";
+        meta.textContent = "完成";
+        head.append(title, meta);
+        const body = document.createElement("pre");
+        body.textContent = output.response || "没有返回文本";
+        item.append(head, body);
+        results.appendChild(item);
+        return;
+      }
+
+      const list = Array.isArray(output.results) ? output.results : [];
+      const complete = list.filter((item) => item.ok !== false).length;
+      summary.textContent = complete + " / " + list.length + " 个 AI 已完成";
+      if (!list.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "没有可显示的结果";
+        results.appendChild(empty);
+        return;
+      }
+
+      for (const result of list) {
+        const item = document.createElement("article");
+        item.className = "result";
+        const head = document.createElement("div");
+        head.className = "result-head";
+        const title = document.createElement("strong");
+        title.textContent = result.provider || "Provider";
+        const meta = document.createElement("span");
+        meta.className = "meta " + (result.ok === false ? "error" : "success");
+        meta.textContent = result.ok === false ? (result.code || "失败") : "完成";
+        head.append(title, meta);
+        const body = document.createElement("pre");
+        body.textContent = result.ok === false ? (result.error || "执行失败") : (result.response || "没有返回文本");
+        item.append(head, body);
+        results.appendChild(item);
+      }
+    }
+
+    function receive(event) {
+      const data = event.data;
+      if (!data) return;
+      if (data.method === "ui/notifications/tool-result") {
+        render(data.params && (data.params.result || data.params));
+      }
+    }
+
+    window.addEventListener("message", receive);
+    render(outputFromHost());
+  </script>
+</body>
+</html>

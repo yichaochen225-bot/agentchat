@@ -1,11 +1,3 @@
-/**
- * AgentChat Cloud provider manifest.
- *
- * The upstream/local project currently has 10 providers. Cloud v0.1 ports the
- * three providers below first so the Browser Run/login/runtime path can be
- * stabilized before broadening selector coverage.
- */
-
 export const PROVIDERS = [
   {
     key: "gemini",
@@ -132,6 +124,7 @@ export function publicProvider(provider) {
     key: provider.key,
     name: provider.name,
     cloudEnabled: Boolean(provider.cloudEnabled),
-    phase: provider.cloudEnabled ? "v0.1" : "planned"
+    phase: provider.cloudEnabled ? "v0.2" : "planned"
   };
 }
+

@@ -1,19 +1,6 @@
-# AgentChat Cloud v0.1
+# AgentChat Cloud v0.2
 
-Mobile-first Cloudflare edition of AgentChat. This directory is intentionally isolated from the existing `skills/` runtime so the original local Chrome/CDP workflow can continue to track upstream.
-
-## v0.1 scope
-
-- Cloudflare Worker API + static PWA
-- Browser Run via `@cloudflare/playwright`
-- Durable Object browser/session owner
-- Gemini, Claude, and DeepSeek first-pass browser adapters
-- Auto fallback across the three Cloud-enabled providers
-- Live View login from a phone
-- Encrypted Playwright `storageState` persistence in Durable Object storage
-- API bearer token gate for every browser-consuming endpoint
-
-The remaining AgentChat providers stay visible as `planned` and can be ported after the browser/login/runtime path is proven.
+AgentChat Cloud is a mobile-first multi-AI workspace powered by Cloudflare Browser Run. It lets the user manually authorize supported AI web sessions, send one prompt through a selected or automatic route, and compare up to three providers in parallel.
 
 ## Architecture
 
@@ -21,7 +8,7 @@ The remaining AgentChat providers stay visible as `planned` and can be ported af
 iPhone PWA
    |
    v
-Cloudflare Worker (auth + API + static assets)
+Cloudflare Worker (auth + API + static assets + MCP)
    |
    v
 AgentChatBrowser Durable Object
@@ -34,6 +21,34 @@ Cloudflare Browser Run / Playwright
    +--> DeepSeek
 ```
 
+## What changed in v0.2
+
+- Added auto and parallel compare modes for Gemini, Claude, and DeepSeek.
+- Added local-only history and copy/clear result actions.
+- Improved mobile navigation and connection/authorization status cards.
+- Kept login user-controlled: the user completes login, password, CAPTCHA, and MFA in Cloudflare Live View; AgentChat only stores the encrypted browser session state.
+- Added a token-protected `/mcp` endpoint and an MCP Apps-compatible result widget for a private ChatGPT Developer Mode connection.
+
+## Supported cloud providers
+
+The current Cloudflare Browser Run implementation enables:
+
+- Google Gemini
+- Anthropic Claude
+- DeepSeek
+
+Other providers remain listed in the provider manifest but are not enabled until their web flow has been implemented and tested.
+
+## Run locally
+
+```bash
+cd cloudflare
+npm install
+npm run dev
+```
+
+The browser dashboard is served at the Wrangler local URL. The `/api/*` routes are protected by the site API token configured in `wrangler.jsonc` or a deployment secret.
+
 ## Deploy
 
 Requirements: a Cloudflare account with Workers and Browser Run enabled.
@@ -41,46 +56,42 @@ Requirements: a Cloudflare account with Workers and Browser Run enabled.
 ```bash
 cd cloudflare
 npm install
-
-# Personal API gate used by the PWA.
 npx wrangler secret put AGENTCHAT_API_TOKEN
-
-# Used to derive the AES-GCM key that encrypts saved browser auth state.
-# Use a long random value and do not reuse the API token.
 npx wrangler secret put AUTH_STATE_KEY
-
+npx wrangler secret put MCP_API_TOKEN
 npm run deploy
 ```
 
-After deployment:
+Use `AGENTCHAT_API_TOKEN` for the browser dashboard and `AUTH_STATE_KEY` as a long random secret for encrypted browser state. `MCP_API_TOKEN` is separate from both; keep it private and pass it as a Bearer token when configuring a private MCP connector.
 
-1. Open the Worker URL on iPhone Safari.
-2. Open Settings and enter the same value used for `AGENTCHAT_API_TOKEN` for the current page session.
-3. Under Providers, tap **登录** for Gemini / Claude / DeepSeek.
-4. Complete login in Cloudflare Live View.
-5. Return to AgentChat and tap **保存登录态**.
-6. Tap **检测**. A provider reporting `ready` can be used from the composer.
-7. Add the site to the iPhone Home Screen if desired.
+After deployment, open the Worker URL, enter the dashboard token in Settings, use each Provider's **登录** button, complete the login in Live View, then tap **保存登录态** and **检测**.
 
-## Security model
+## ChatGPT App / MCP connection
 
-- Provider account passwords are never stored by AgentChat Cloud.
-- Browser authentication state is serialized with Playwright `storageState`, encrypted with AES-256-GCM using a key derived from the `AUTH_STATE_KEY` Worker secret, and stored inside the user's Durable Object storage.
-- Browser-consuming endpoints require `Authorization: Bearer <AGENTCHAT_API_TOKEN>`.
-- The PWA keeps the bearer token only in JavaScript memory for this prototype; refreshing or reopening the page requires entering it again. A production version should replace this with Cloudflare Access / OAuth and per-user Durable Objects.
-- CAPTCHA/MFA is not bypassed. Use Live View for manual intervention.
-- Session recording is not enabled.
+The repository now contains a developer-mode MCP scaffold:
 
-## Current limitations
+- endpoint: `POST /mcp`
+- UI resource: `ui://agentchat/result/v1.html`
+- tools: list providers, run one AI, compare multiple AIs, and open a manual authorization page
+- widget: `/mcp-widget.html`
 
-- v0.1 is a vertical slice, not production-ready multi-user SaaS.
-- Provider web UIs can change without notice. Selector failures are surfaced as `EDITOR_NOT_FOUND` / `page_changed` rather than bypassed.
-- Browser Run traffic can be identified as automated traffic by sites. Cloudflare's own documentation explicitly notes that custom user agents do not change that fact.
-- Streaming, DAG orchestration, file uploads, D1/R2 history, and ChatGPT MCP exposure are intentionally deferred until the three-provider path is stable.
+The endpoint is intentionally token-protected and stateless for a personal prototype. Before a public ChatGPT App launch, replace the simple shared token and JSON-RPC handler with OAuth 2.1 and a production Streamable HTTP MCP transport, then configure the HTTPS public endpoint in ChatGPT Developer Mode.
+
+When `agentchat_open_login` is used, the user must finish the login flow themselves. Do not send passwords, verification codes, cookies, or API keys to the MCP tool.
+
+## Security notes
+
+- Browser auth state is encrypted before it is stored in the Durable Object.
+- The frontend keeps the dashboard token in session storage and does not send it to the MCP endpoint.
+- MCP access requires `MCP_API_TOKEN`; never commit the secret to Git.
+- Provider site changes can break selectors, so run a real login/status check after enabling each provider.
+- This remains a personal prototype, not a multi-user SaaS. Add Cloudflare Access/OAuth and per-user Durable Objects before sharing it broadly.
 
 ## Local development
 
 ```bash
+cd cloudflare
+npm install
 npm run dev
 ```
 

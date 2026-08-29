@@ -7,7 +7,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="AgentChat">
-  <title>AgentChat Cloud</title>
+  <meta name="description" content="用多个网页版 AI 协作完成任务的移动端调度台">
+  <title>AgentChat Cloud · 多 AI 调度台</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
@@ -16,62 +17,118 @@
   <div class="app-shell">
     <header class="topbar">
       <div>
-        <div class="eyebrow">AGENTCHAT CLOUD</div>
+        <div class="eyebrow">AGENTCHAT CLOUD · V0.2</div>
         <h1>多模型 AI 调度台</h1>
       </div>
-      <button class="icon-button" id="settingsButton" aria-label="设置">⚙</button>
+      <button class="icon-button" id="settingsButton" type="button" aria-label="设置">⚙</button>
     </header>
 
     <main>
-      <section class="hero-card">
-        <div class="status-row">
-          <span class="dot" id="healthDot"></span>
-          <span id="healthText">正在检查 Cloudflare 后端…</span>
+      <section class="hero-card" id="conversationSection">
+        <div class="hero-copy">
+          <div class="status-row">
+            <span class="dot" id="healthDot"></span>
+            <span id="healthText">正在检查 Cloudflare 后端…</span>
+          </div>
+          <h2>一个问题，让多个模型一起思考。</h2>
+          <p>智能路由会自动使用可用模型；并行对比可以同时查看 Gemini、Claude 和 DeepSeek 的回答。</p>
         </div>
-        <h2>今天想让 AgentChat 做什么？</h2>
-        <p>默认自动选择可用模型；复杂任务以后可升级为并行和 DAG。</p>
+        <div class="hero-stats" aria-label="AgentChat 概览">
+          <div class="stat">
+            <strong id="availableCount">0</strong>
+            <span>已接入模型</span>
+          </div>
+          <div class="stat">
+            <strong id="historyCount">0</strong>
+            <span>本机记录</span>
+          </div>
+        </div>
       </section>
 
-      <section class="composer-card">
-        <textarea id="promptInput" rows="5" placeholder="输入任务，例如：分析这个项目的架构和安全问题"></textarea>
+      <section class="composer-card" aria-labelledby="composerTitle">
+        <div class="composer-heading">
+          <div>
+            <div class="eyebrow">NEW TASK</div>
+            <h2 id="composerTitle">输入你的任务</h2>
+          </div>
+          <span class="prompt-count" id="promptCount">0 / 12000</span>
+        </div>
+
+        <textarea id="promptInput" rows="6" maxlength="12000" placeholder="例如：比较这三个方案的优缺点，并给出一个可执行的建议"></textarea>
+
+        <div class="mode-row">
+          <div class="mode-tabs" role="tablist" aria-label="执行模式">
+            <button class="mode-tab active" id="modeAutoButton" type="button" role="tab" aria-selected="true" aria-pressed="true">智能路由</button>
+            <button class="mode-tab" id="modeCompareButton" type="button" role="tab" aria-selected="false" aria-pressed="false">并行对比</button>
+          </div>
+          <label class="select-wrap" id="singleProviderWrap">
+            <span class="sr-only">选择单一模型</span>
+            <select id="providerSelect" aria-label="选择模型">
+              <option value="auto">自动选择</option>
+              <option value="gemini">Gemini</option>
+              <option value="claude">Claude</option>
+              <option value="deepseek">DeepSeek</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="compare-options hidden" id="compareOptions">
+          <div class="option-title">选择要同时回答的 AI</div>
+          <div class="compare-picker" id="comparePicker"></div>
+        </div>
+
         <div class="composer-footer">
-          <select id="providerSelect" aria-label="模型">
-            <option value="auto">自动选择</option>
-            <option value="gemini">Gemini</option>
-            <option value="claude">Claude</option>
-            <option value="deepseek">DeepSeek</option>
-          </select>
-          <button class="primary-button" id="sendButton">开始执行</button>
+          <span class="shortcut-hint">⌘ / Ctrl + Enter 发送</span>
+          <button class="primary-button" id="sendButton" type="button">开始执行</button>
         </div>
       </section>
 
-      <section class="result-card hidden" id="resultCard">
+      <section class="result-card hidden" id="resultCard" aria-live="polite">
         <div class="result-head">
           <div>
             <span class="badge" id="resultProvider">Agent</span>
             <span class="muted" id="resultMeta"></span>
           </div>
-          <button class="text-button" id="copyButton">复制</button>
+          <div class="result-actions">
+            <button class="text-button" id="copyAllButton" type="button">复制结果</button>
+            <button class="text-button" id="clearResultButton" type="button">清除</button>
+          </div>
         </div>
-        <pre id="resultText"></pre>
+        <div id="singleResult">
+          <pre id="resultText"></pre>
+        </div>
+        <div class="compare-results hidden" id="compareResults"></div>
       </section>
 
-      <section class="section-block">
+      <section class="section-block" id="providersSection">
         <div class="section-head">
           <div>
             <div class="eyebrow">PROVIDERS</div>
-            <h3>AI 连接状态</h3>
+            <h3>AI 连接与授权</h3>
           </div>
-          <button class="text-button" id="refreshProviders">刷新</button>
+          <button class="text-button" id="refreshProviders" type="button">刷新</button>
         </div>
+        <p class="section-note">每个 AI 需要单独完成一次登录。密码和验证码只会发送到对应的远程登录页，不会保存到 AgentChat。</p>
         <div class="provider-grid" id="providerGrid"></div>
+      </section>
+
+      <section class="section-block" id="historySection">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">LOCAL HISTORY</div>
+            <h3>本机历史</h3>
+          </div>
+          <button class="text-button" id="clearHistoryButton" type="button">清除全部</button>
+        </div>
+        <p class="section-note">历史只保存在当前浏览器，不上传到 Cloudflare。</p>
+        <div class="history-list" id="historyList"></div>
       </section>
     </main>
 
     <nav class="bottom-nav" aria-label="主导航">
-      <button class="nav-item active">对话</button>
-      <button class="nav-item" disabled>任务</button>
-      <button class="nav-item" disabled>历史</button>
+      <button class="nav-item active" type="button" data-target="#conversationSection">对话</button>
+      <button class="nav-item" type="button" data-target="#providersSection">模型</button>
+      <button class="nav-item" type="button" data-target="#historySection">历史</button>
     </nav>
   </div>
 
@@ -82,11 +139,11 @@
           <div class="eyebrow">SECURITY</div>
           <h3>个人访问令牌</h3>
         </div>
-        <button class="icon-button" value="cancel" aria-label="关闭">×</button>
+        <button class="icon-button" value="cancel" type="submit" aria-label="关闭">×</button>
       </div>
-      <p class="muted">与 Cloudflare Secret <code>AGENTCHAT_API_TOKEN</code> 保持一致。仅保存在当前手机浏览器。</p>
+      <p class="muted">与 Cloudflare Secret <code>AGENTCHAT_API_TOKEN</code> 保持一致。令牌只保存在当前手机浏览器的会话内。</p>
       <input id="tokenInput" type="password" autocomplete="off" placeholder="粘贴访问令牌">
-      <button class="primary-button full" id="saveTokenButton" value="cancel" type="button">保存到本机</button>
+      <button class="primary-button full" id="saveTokenButton" value="cancel" type="button">保存并验证</button>
       <button class="danger-button full" id="clearAuthButton" value="cancel" type="button">清除云端 AI 登录态</button>
     </form>
   </dialog>
@@ -98,9 +155,9 @@
           <div class="eyebrow">MOBILE LOGIN</div>
           <h3>手机登录助手 · <span id="loginHelperProvider">Provider</span></h3>
         </div>
-        <button class="icon-button" value="cancel" aria-label="关闭">×</button>
+        <button class="icon-button" value="cancel" type="submit" aria-label="关闭">×</button>
       </div>
-      <p class="muted">给 iPhone 的 Browser Run 登录页使用。这里输入的账号、密码或验证码只会发送到当前远程页面，不写入 AgentChat 存储；密码发送后会立即从本页清空。</p>
+      <p class="muted">请先点击 Live View 中的目标输入框。账号、密码或验证码只会发送到当前远程页面；密码发送后会立即从本页清空。</p>
 
       <label class="helper-label" for="loginAccountInput">账号 / 邮箱 / 手机号</label>
       <div class="helper-row">
