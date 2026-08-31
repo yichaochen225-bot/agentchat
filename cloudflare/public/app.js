@@ -25,10 +25,15 @@ function apiError(error) {
   if (error.code === "ALL_PROVIDERS_FAILED") return "当前访客 AI 都不可用，可能需要登录或已达到免费次数";
   return error.message || "请求失败";
 }
-async function api(path, body) {
-  const headers = { "content-type": "application/json" };
+async function api(path, body, method = "POST") {
+  const headers = {};
   if (state.token) headers.authorization = "Bearer " + state.token;
-  const response = await fetch(path, { method: "POST", headers, body: JSON.stringify(body) });
+  const options = { method, headers };
+  if (method !== "GET") {
+    headers["content-type"] = "application/json";
+    options.body = JSON.stringify(body || {});
+  }
+  const response = await fetch(path, options);
   const data = await response.json().catch(() => ({}));
   if (!response.ok) { const error = new Error(data.error || "HTTP " + response.status); Object.assign(error, data, { status: response.status }); throw error; }
   return data;
@@ -97,7 +102,7 @@ el.settingsButton.addEventListener("click", () => { el.token.value = state.token
 el.saveToken.addEventListener("click", async () => {
   const candidate = el.token.value.trim(); if (!candidate) return toast("请先输入访问令牌");
   state.token = candidate; el.saveToken.disabled = true;
-  try { await api("/api/browser/status", {}); sessionStorage.setItem(TOKEN_KEY, candidate); el.settings.close(); toast("访问令牌验证成功"); }
+  try { await api("/api/browser/status", null, "GET"); sessionStorage.setItem(TOKEN_KEY, candidate); el.settings.close(); toast("访问令牌验证成功"); }
   catch (error) { state.token = ""; toast(apiError(error)); }
   finally { el.saveToken.disabled = false; }
 });
