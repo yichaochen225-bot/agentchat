@@ -108,10 +108,10 @@
           </div>
           <button class="text-button" id="refreshProviders" type="button">刷新</button>
         </div>
-        <p class="section-note">每个 AI 需要单独完成一次登录。密码和验证码只会发送到对应的远程登录页，不会保存到 AgentChat。</p>
+        <p class="section-note">登录始终在 AI 官方页面完成。AgentChat 不保存 Google 密码；遇到验证码或 MFA 时会暂停，由你本人完成。</p>
         <div class="batch-login-row">
-          <button class="small-button login" id="batchLoginButton" type="button">一键准备 Google 授权</button>
-          <span class="muted">共用同一个浏览器会话，通常只需输入一次密码</span>
+          <button class="small-button login" id="batchLoginButton" type="button">逐个准备 Google 授权</button>
+          <span class="muted">按顺序打开授权页，减少浏览器限流</span>
         </div>
         <div class="batch-login-links hidden" id="batchLoginLinks" aria-live="polite"></div>
         <div class="provider-grid" id="providerGrid"></div>
