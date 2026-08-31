@@ -4,14 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#080a0f">
-<title>AgentChat · 免费访客模式</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AgentChat">
+<meta name="format-detection" content="telephone=no">
+<title>AgentChat · iPhone 多 AI Agent</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 <div class="app-shell">
-<header class="topbar"><div><div class="eyebrow">GUEST WEB MODE</div><h1>AgentChat</h1></div><button id="settingsButton" class="icon-button" type="button">⚙</button></header>
+<header class="topbar"><div><div class="eyebrow">IPHONE · PWA · GUEST WEB MODE</div><h1>AgentChat</h1></div><button id="settingsButton" class="icon-button" type="button">⚙</button></header>
 <main>
-<section class="hero-card"><div><div class="status-row"><span class="dot good"></span><span>免费访客模式 · 不使用 AI API</span></div><h2>一次询问多个 AI</h2><p>通过官方网页访客功能发送问题并读取回答。不会保存 AI 登录密码、验证码或登录态。</p></div></section>
+<section class="hero-card"><div><div class="status-row"><span class="dot good"></span><span>iPhone PWA · 不保存 AI 密码</span></div><h2>一次询问多个 AI</h2><p>通过远程浏览器 Agent 调用官方网页。Google/AI 登录应由你本人完成 Passkey、Face ID 或其他官方验证；AgentChat 不保存账号密码、验证码或 Passkey 私钥。</p><p class="muted">在 iPhone Safari 中打开后，可使用“共享 → 添加到主屏幕”，以独立 App 方式运行。</p></div></section>
 <section class="composer-card">
 <div class="composer-heading"><div><div class="eyebrow">PROMPT</div><h2>输入问题</h2></div><span id="promptCount" class="prompt-count">0 / 12000</span></div>
 <textarea id="promptInput" maxlength="12000" placeholder="例如：请分析今天 ETH 的走势"></textarea>
@@ -26,4 +32,5 @@
 <dialog id="settingsDialog"><form method="dialog" class="dialog-card"><div class="section-head"><h3>连接设置</h3><button class="icon-button" type="submit">×</button></div><p class="muted">输入你在 Cloudflare Secret 中设置的 AgentChat 访问令牌。它只保存在当前手机会话，不是任何 AI 密码。</p><input id="tokenInput" type="password" autocomplete="off" placeholder="AgentChat 访问令牌"><button id="saveTokenButton" class="primary-button full" type="button">保存并验证</button></form></dialog>
 <div id="toast" class="toast" role="status"></div>
 <script type="module" src="/app.js"></script>
+<script type="module" src="/pwa.js"></script>
 </body></html>
