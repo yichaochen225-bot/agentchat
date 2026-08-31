@@ -1,5 +1,5 @@
-const CACHE = "agentchat-cloud-v0.2";
-const SHELL = ["/", "/index.html", "/styles.css", "/app.js", "/manifest.webmanifest", "/icon.svg", "/mcp-widget.html"];
+const CACHE = "agentchat-cloud-v0.3";
+const SHELL = ["/", "/index.html", "/styles.css", "/app.js", "/pwa.js", "/manifest.webmanifest", "/icon.svg", "/mcp-widget.html"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
