@@ -15,22 +15,64 @@
 </head>
 <body>
 <div class="app-shell">
-<header class="topbar"><div><div class="eyebrow">IPHONE · PWA · GUEST WEB MODE</div><h1>AgentChat</h1></div><button id="settingsButton" class="icon-button" type="button">⚙</button></header>
+<header class="topbar">
+  <div><div class="eyebrow">IPHONE · PWA · 8 WEB AGENTS</div><h1>AgentChat</h1></div>
+  <button id="settingsButton" class="icon-button" type="button" aria-label="设置">⚙</button>
+</header>
 <main>
-<section class="hero-card"><div><div class="status-row"><span class="dot good"></span><span>iPhone PWA · 不保存 AI 密码</span></div><h2>一次询问多个 AI</h2><p>通过远程浏览器 Agent 调用官方网页。Google/AI 登录应由你本人完成 Passkey、Face ID 或其他官方验证；AgentChat 不保存账号密码、验证码或 Passkey 私钥。</p><p class="muted">在 iPhone Safari 中打开后，可使用“共享 → 添加到主屏幕”，以独立 App 方式运行。</p></div></section>
-<section class="composer-card">
-<div class="composer-heading"><div><div class="eyebrow">PROMPT</div><h2>输入问题</h2></div><span id="promptCount" class="prompt-count">0 / 12000</span></div>
-<textarea id="promptInput" maxlength="12000" placeholder="例如：请分析今天 ETH 的走势"></textarea>
-<div class="mode-row"><select id="providerSelect"><option value="auto">自动访客：依次尝试</option></select><button id="askButton" class="primary-button" type="button">询问</button></div>
-<button id="askAllButton" class="secondary-button full" type="button">依次询问全部访客 AI</button>
+<section class="hero-card">
+  <div>
+    <div class="status-row"><span id="systemDot" class="dot"></span><span id="systemStatus">等待连接</span></div>
+    <h2>一台 iPhone，调度多个网页 AI</h2>
+    <p>远程浏览器负责运行 AI 网页，iPhone 负责控制、登录和查看结果。支持 Gemini、ChatGPT、Claude、Qwen、Kimi、MiniMax、MiMo、DeepSeek。</p>
+    <div class="hero-metrics"><span><strong id="providerCount">8</strong> AI</span><span><strong id="readyCount">0</strong> 可用</span><span><strong id="savedState">未保存</strong> 会话</span></div>
+  </div>
 </section>
-<section class="section-block"><div class="section-head"><div><div class="eyebrow">RESULTS</div><h3>AI 回答</h3></div><span id="runStatus" class="muted">等待问题</span></div><div id="results" class="results"></div></section>
-<section class="section-block"><div class="section-head"><div><div class="eyebrow">LOCAL HISTORY</div><h3>本机历史</h3></div><button id="clearHistoryButton" class="text-button" type="button">清除</button></div><div id="historyList" class="history-list"></div></section>
+
+<section id="composerSection" class="composer-card">
+  <div class="composer-heading"><div><div class="eyebrow">PROMPT</div><h2>输入任务</h2></div><span id="promptCount" class="prompt-count">0 / 12000</span></div>
+  <textarea id="promptInput" maxlength="12000" placeholder="例如：分别分析今天 ETH 的走势，并指出分歧"></textarea>
+  <div class="control-grid">
+    <label><span>访问方式</span><select id="accessSelect"><option value="session">已登录会话（推荐）</option><option value="guest">访客模式</option></select></label>
+    <label><span>AI</span><select id="providerSelect"><option value="auto">自动选择可用 AI</option></select></label>
+  </div>
+  <div class="button-row"><button id="askButton" class="primary-button" type="button">询问</button><button id="askAllButton" class="secondary-button" type="button">依次询问全部 AI</button></div>
+</section>
+
+<section id="accountsSection" class="section-block">
+  <div class="section-head"><div><div class="eyebrow">ACCOUNTS</div><h3>AI 账户与登录状态</h3></div><button id="refreshProvidersButton" class="small-button" type="button">检测全部</button></div>
+  <p class="section-note">点击“登录”会打开该 AI 的远程官方网页。认证、验证码和人类验证由你本人完成。AgentChat 保存的是登录后的浏览器 session，不保存 Passkey 私钥。</p>
+  <div class="security-note"><strong>Passkey 提醒</strong><span>iPhone 的设备 Passkey 不能直接注入云端浏览器。若登录页支持跨设备 Passkey，可使用官方流程；否则请在远程登录页完成该网站提供的其他官方认证。</span></div>
+  <div class="session-actions"><button id="saveAuthButton" class="secondary-button" type="button">加密保存当前登录</button><button id="clearAuthButton" class="danger-button" type="button">清除云端登录</button></div>
+  <div id="providerGrid" class="provider-grid"></div>
+</section>
+
+<section id="resultsSection" class="section-block">
+  <div class="section-head"><div><div class="eyebrow">RESULTS</div><h3>AI 回答</h3></div><span id="runStatus" class="muted">等待任务</span></div>
+  <div id="results" class="results"></div>
+</section>
+
+<section id="historySection" class="section-block">
+  <div class="section-head"><div><div class="eyebrow">LOCAL HISTORY</div><h3>本机历史</h3></div><button id="clearHistoryButton" class="text-button" type="button">清除</button></div>
+  <div id="historyList" class="history-list"></div>
+</section>
 </main>
-<nav class="bottom-nav"><button class="nav-item active" type="button" data-target=".composer-card">询问</button><button class="nav-item" type="button" data-target=".section-block">结果</button></nav>
+<nav class="bottom-nav">
+  <button class="nav-item active" type="button" data-target="#composerSection">询问</button>
+  <button class="nav-item" type="button" data-target="#accountsSection">账户</button>
+  <button class="nav-item" type="button" data-target="#resultsSection">结果</button>
+</nav>
 </div>
-<dialog id="settingsDialog"><form method="dialog" class="dialog-card"><div class="section-head"><h3>连接设置</h3><button class="icon-button" type="submit">×</button></div><p class="muted">输入你在 Cloudflare Secret 中设置的 AgentChat 访问令牌。它只保存在当前手机会话，不是任何 AI 密码。</p><input id="tokenInput" type="password" autocomplete="off" placeholder="AgentChat 访问令牌"><button id="saveTokenButton" class="primary-button full" type="button">保存并验证</button></form></dialog>
-<div id="toast" class="toast" role="status"></div>
+
+<dialog id="settingsDialog"><form method="dialog" class="dialog-card">
+  <div class="section-head"><div><div class="eyebrow">SECURE CONNECTION</div><h3>AgentChat 连接</h3></div><button class="icon-button" type="submit" aria-label="关闭">×</button></div>
+  <p class="muted">输入部署 AgentChat 时设置的访问令牌。令牌只保存在当前 iPhone 会话中，不是 Google 或任何 AI 的密码。</p>
+  <input id="tokenInput" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="AgentChat 访问令牌">
+  <button id="saveTokenButton" class="primary-button full" type="button">保存并验证</button>
+</form></dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script type="module" src="/app.js"></script>
 <script type="module" src="/pwa.js"></script>
-</body></html>
+</body>
+</html>
