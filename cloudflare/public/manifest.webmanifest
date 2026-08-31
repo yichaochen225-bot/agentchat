@@ -1,11 +1,16 @@
 {
-  "name": "AgentChat Cloud",
+  "id": "/",
+  "name": "AgentChat Mobile",
   "short_name": "AgentChat",
-  "description": "Mobile-first multi-provider AI orchestration powered by Cloudflare Browser Run",
+  "description": "iPhone-first multi-provider AI orchestration powered by Cloudflare Browser Run",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
   "background_color": "#090b10",
   "theme_color": "#0b0d12",
+  "categories": ["productivity", "utilities"],
   "icons": [
     {
       "src": "/icon.svg",
