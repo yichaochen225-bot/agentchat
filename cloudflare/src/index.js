@@ -56,7 +56,7 @@ function isAuthorized(request, env) {
   const expected = String(env.AGENTCHAT_API_TOKEN || "").trim();
   if (!expected) return false;
   const header = request.headers.get("authorization") || "";
-  const match = header.match(/^Bearer\\s+(.+)$/i);
+  const match = header.match(/^Bearer\s+(.+)$/i);
   const provided = String(match?.[1] || "").trim();
   return provided === expected;
 }
