@@ -87,7 +87,12 @@ async function run(selected) {
         const data = await askProvider(key, prompt);
         completed.push(providerName(data.provider || key || "auto"));
       } catch (error) {
-        addResult(key || "auto", apiError(error), false);
+        const details = Array.isArray(error.details) && error.details.length
+          ? error.details
+          : [{ provider: key || "auto", error: apiError(error), code: error.code }];
+        for (const item of details) {
+          addResult(item.provider || key || "auto", item.error || item.code || apiError(error), false);
+        }
         if (error.status === 401) { el.settings.showModal(); break; }
       }
     }
