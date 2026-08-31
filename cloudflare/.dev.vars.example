@@ -1,0 +1,10 @@
+# Required: choose a private random value with 32+ characters.
+# This protects the AgentChat control API. It is NOT an AI account password.
+AGENTCHAT_API_TOKEN=
+
+# Required: choose a DIFFERENT private random value with 32+ characters.
+# This encrypts the persisted browser storage state (cookies/local storage).
+AUTH_STATE_KEY=
+
+# Optional: only set this if you plan to use the AgentChat MCP endpoint.
+MCP_API_TOKEN=
