@@ -1,108 +1,43 @@
-# AgentChat Cloud v0.2
+# AgentChat Free Web Mode
 
-AgentChat Cloud is a mobile-first multi-AI workspace powered by Cloudflare Browser Run. It lets the user manually authorize supported AI web sessions, send one prompt through a selected or automatic route, and compare up to three providers in parallel.
+AgentChat 是一个手机优先的免费多 AI 网页入口，不使用 AI API，也不保存 Google 密码、验证码或 Cookie。
 
-## Architecture
+## 使用方式
 
-```text
-iPhone PWA
-   |
-   v
-Cloudflare Worker (auth + API + static assets + MCP)
-   |
-   v
-AgentChatBrowser Durable Object
-   |
-   v
-Cloudflare Browser Run / Playwright
-   |
-   +--> Gemini
-   +--> Claude
-   +--> DeepSeek
-```
+1. 在 AgentChat 输入问题。
+2. 点击某个 AI 的“复制并打开”。
+3. 手机会复制问题并打开 AI 官方网页。
+4. 在官方网页使用 iPhone Apple 密码自动填充、Passkey 或“使用 Google 登录”。
+5. 完成人机验证后，把问题粘贴进去发送。
 
-## What changed in v0.2
+当前入口：
 
-- Added auto and parallel compare modes for Gemini, Claude, and DeepSeek.
-- Added local-only history and copy/clear result actions.
-- Improved mobile navigation and connection/authorization status cards.
-- Added a batch Google authorization helper that prepares all three Live View pages in one shared browser context.
-- Kept login user-controlled: the user completes login, password, CAPTCHA, and MFA in Cloudflare Live View; AgentChat only stores the encrypted browser session state.
-- Added a token-protected `/mcp` endpoint and an MCP Apps-compatible result widget for a private ChatGPT Developer Mode connection.
-
-## Supported cloud providers
-
-The current Cloudflare Browser Run implementation enables:
-
-- Google Gemini
-- Anthropic Claude
+- Gemini
+- Claude
 - DeepSeek
+- 通义千问
+- Kimi
+- 豆包
 
-Other providers remain listed in the provider manifest but are not enabled until their web flow has been implemented and tested.
+## 安全边界
 
-## Run locally
+- AgentChat 不能读取 iPhone 密码库。
+- 密码自动填充只由 Safari/Apple 密码在官方网页完成。
+- AgentChat 不接触密码、Google 验证码、MFA 或人机验证。
+- 不使用 Cloudflare 远程浏览器，因此不会因为批量启动远程浏览器触发 429。
+- 网页版 AI 的登录状态由手机浏览器自己管理，不会复制到服务器。
 
-```bash
-cd cloudflare
-npm install
-npm run dev
-```
+## 部署
 
-The browser dashboard is served at the Wrangler local URL. The `/api/*` routes are protected by the site API token configured in `wrangler.jsonc` or a deployment secret.
+项目仍然可以部署到 Cloudflare Workers。`cloudflare/public` 是当前免费网页模式的前端，推送到 `master` 后由 Cloudflare Workers Builds 或 GitHub Actions 部署。
 
-## Deploy
+Cloudflare Workers Builds 设置：
 
-Requirements: a Cloudflare account with Workers and Browser Run enabled.
+- Root directory: `cloudflare`
+- Build command: `None`
+- Deploy command: `npx wrangler deploy`
+- Production branch: `master`
 
-```bash
-cd cloudflare
-npm install
-npx wrangler secret put AGENTCHAT_API_TOKEN
-npx wrangler secret put AUTH_STATE_KEY
-npx wrangler secret put MCP_API_TOKEN
-npm run deploy
-```
+## 重要限制
 
-Use `AGENTCHAT_API_TOKEN` for the browser dashboard and `AUTH_STATE_KEY` as a long random secret for encrypted browser state. `MCP_API_TOKEN` is separate from both and is intended for MCP Inspector or other controlled server-to-server calls; keep it private.
-
-After deployment, open the Worker URL, enter the dashboard token in Settings, tap **一键准备 Google 授权**, then open the prepared Gemini, Claude, and DeepSeek pages in order. Complete the first Google login yourself; the other pages reuse the same Google browser session when possible. Finish any provider-specific consent/MFA, then tap **保存登录态** and **检测**.
-
-### Automatic GitHub deployment
-
-The repository includes `.github/workflows/cloudflare-deploy.yml`. Every push to `master` that changes `cloudflare/` runs the tests and then executes `npx wrangler deploy`, which publishes directly to production traffic. Add these GitHub repository secrets before relying on the workflow:
-
-- `CLOUDFLARE_API_TOKEN`: a Cloudflare API Token with permission to edit Workers and deploy versions.
-- `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account ID that owns `agentchat-cloud`.
-
-If the repository is also connected through Cloudflare Workers Builds, change its deploy command from `npx wrangler versions upload` to `npx wrangler deploy` (or disable that duplicate build). `versions upload` only stages a version and does not send traffic to it.
-
-## ChatGPT App / MCP connection
-
-The repository now contains an MCP Apps-compatible scaffold:
-
-- endpoint: `POST /mcp`
-- UI resource: `ui://agentchat/result/v1.html`
-- tools: list providers, run one AI, compare multiple AIs, and open a manual authorization page
-- widget: `/mcp-widget.html`
-
-The endpoint is intentionally token-protected and stateless for a personal prototype. ChatGPT does not accept a custom static API key, so this endpoint is not a one-click ChatGPT connection yet. For personal development, connect it through Secure MCP Tunnel; for a public ChatGPT App, replace the shared token with OAuth 2.1 and use a production Streamable HTTP MCP transport before adding the HTTPS endpoint in ChatGPT Developer Mode.
-
-When `agentchat_open_login` is used, the user must finish the login flow themselves. Do not send passwords, verification codes, cookies, or API keys to the MCP tool.
-
-## Security notes
-
-- Browser auth state is encrypted before it is stored in the Durable Object.
-- The frontend keeps the dashboard token in session storage and does not send it to the MCP endpoint.
-- MCP access requires `MCP_API_TOKEN`; never commit the secret to Git.
-- Provider site changes can break selectors, so run a real login/status check after enabling each provider.
-- This remains a personal prototype, not a multi-user SaaS. Add Cloudflare Access/OAuth and per-user Durable Objects before sharing it broadly.
-
-## Local development
-
-```bash
-cd cloudflare
-npm install
-npm run dev
-```
-
-Browser Run is a remote Cloudflare binding. For real-browser local tests, configure Wrangler remote bindings according to current Cloudflare Browser Run documentation.
+不使用 API 时，网页无法安全地跨域读取各 AI 的对话内容，也不能代替用户点击发送、处理 CAPTCHA 或绕过登录保护。因此当前设计是“复制问题 + 打开官方页面 + 手机自动填充”，这是免费网页方案中安全且可靠的边界。
