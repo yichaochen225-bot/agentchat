@@ -36,11 +36,12 @@ export async function probeProvider(page, provider) {
   const onAuth = hostMatches(current.hostname, provider.authHosts || [])
     || (provider.authPathPatterns || []).some((pattern) => pattern.test(current.pathname));
   const signedOut = await isAnyVisible(page, provider.signedOutSelectors || []);
-  const editor = onProvider && !signedOut ? await firstVisible(page, provider.editorSelectors || [], 900) : null;
+  const editor = onProvider ? await firstVisible(page, provider.editorSelectors || [], 900) : null;
 
   let state = "unknown";
-  if (onAuth || signedOut || !onProvider) state = "auth_required";
+  if (editor && signedOut) state = "guest";
   else if (editor) state = "ready";
+  else if (onAuth || signedOut || !onProvider) state = "auth_required";
   else state = "page_changed";
 
   return {
@@ -164,6 +165,7 @@ export async function runProvider(page, provider, prompt) {
   return {
     provider: provider.key,
     response,
-    url: page.url()
+    url: page.url(),
+    access: status.state
   };
 }
