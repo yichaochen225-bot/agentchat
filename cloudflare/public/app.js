@@ -1,184 +1,107 @@
-const $ = (selector) => document.querySelector(selector);
-
-const MAX_PROMPT_CHARS = 12000;
-const HISTORY_KEY = "agentchat_free_history_v1";
-const MAX_HISTORY = 20;
-
+const $ = (s) => document.querySelector(s);
+const TOKEN_KEY = "agentchat_api_token";
+const HISTORY_KEY = "agentchat_guest_history_v1";
+const MAX_PROMPT = 12000;
 const PROVIDERS = [
-  { key: "gemini", name: "Gemini", note: "Google 官方网页", url: "https://gemini.google.com/app" },
-  { key: "claude", name: "Claude", note: "Anthropic 官方网页", url: "https://claude.ai/" },
-  { key: "deepseek", name: "DeepSeek", note: "官方聊天网页", url: "https://chat.deepseek.com/" },
-  { key: "qwen", name: "通义千问", note: "阿里官方网页", url: "https://www.qianwen.com/" },
-  { key: "kimi", name: "Kimi", note: "月之暗面官方网页", url: "https://www.kimi.com/" },
-  { key: "doubao", name: "豆包", note: "字节官方网页", url: "https://www.doubao.com/chat/" }
+  { key: "gemini", name: "Gemini" },
+  { key: "claude", name: "Claude" },
+  { key: "deepseek", name: "DeepSeek" }
 ];
-
-const state = {
-  prompt: "",
-  history: readHistory()
+const state = { token: sessionStorage.getItem(TOKEN_KEY) || "", history: readHistory(), busy: false };
+const el = {
+  prompt: $("#promptInput"), count: $("#promptCount"), select: $("#providerSelect"),
+  ask: $("#askButton"), askAll: $("#askAllButton"), results: $("#results"),
+  status: $("#runStatus"), history: $("#historyList"), clear: $("#clearHistoryButton"),
+  settings: $("#settingsDialog"), settingsButton: $("#settingsButton"),
+  token: $("#tokenInput"), saveToken: $("#saveTokenButton"), toast: $("#toast")
 };
-
-const elements = {
-  promptInput: $("#promptInput"),
-  promptCount: $("#promptCount"),
-  providerGrid: $("#providerGrid"),
-  providerCount: $("#providerCount"),
-  historyCount: $("#historyCount"),
-  historyList: $("#historyList"),
-  toast: $("#toast"),
-  helpButton: $("#helpButton"),
-  helpDialog: $("#helpDialog"),
-  copyButton: $("#copyButton"),
-  openAllButton: $("#openAllButton"),
-  clearHistoryButton: $("#clearHistoryButton")
-};
-
-function readHistory() {
-  try {
-    const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
-    return Array.isArray(value) ? value : [];
-  } catch (_) {
-    return [];
-  }
+function readHistory() { try { const v = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch (_) { return []; } }
+function toast(message) { el.toast.textContent = message; el.toast.classList.add("show"); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.toast.classList.remove("show"), 3200); }
+function providerName(key) { return PROVIDERS.find((p) => p.key === key)?.name || key; }
+function updateCount() { el.count.textContent = el.prompt.value.length + " / " + MAX_PROMPT; }
+function apiError(error) {
+  if (error.status === 401) return "访问令牌不正确，请打开设置重新保存";
+  if (error.code === "BROWSER_RATE_LIMITED") return "Cloudflare 浏览器暂时限流，程序已暂停，请稍后再试";
+  if (error.code === "ALL_PROVIDERS_FAILED") return "当前访客 AI 都不可用，可能需要登录或已达到免费次数";
+  return error.message || "请求失败";
 }
-
-function persistHistory() {
-  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history)); } catch (_) {}
+async function api(path, body) {
+  const headers = { "content-type": "application/json" };
+  if (state.token) headers.authorization = "Bearer " + state.token;
+  const response = await fetch(path, { method: "POST", headers, body: JSON.stringify(body) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) { const error = new Error(data.error || "HTTP " + response.status); Object.assign(error, data, { status: response.status }); throw error; }
+  return data;
 }
-
-function toast(message) {
-  elements.toast.textContent = message;
-  elements.toast.classList.add("show");
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => elements.toast.classList.remove("show"), 3000);
+function addResult(provider, text, ok = true) {
+  const card = document.createElement("article");
+  card.className = "result-card " + (ok ? "success" : "error");
+  const head = document.createElement("div"); head.className = "result-head";
+  const title = document.createElement("strong"); title.textContent = providerName(provider);
+  const badge = document.createElement("span"); badge.className = "muted"; badge.textContent = ok ? "访客回答" : "不可用";
+  head.append(title, badge);
+  const body = document.createElement("pre"); body.textContent = text;
+  card.append(head, body); el.results.appendChild(card);
 }
-
-function updatePrompt() {
-  state.prompt = elements.promptInput.value;
-  elements.promptCount.textContent = state.prompt.length + " / " + MAX_PROMPT_CHARS;
-  elements.promptCount.classList.toggle("warn", state.prompt.length > MAX_PROMPT_CHARS * 0.85);
-}
-
-async function copyPrompt() {
-  const prompt = state.prompt.trim();
-  if (!prompt) {
-    toast("请先输入问题");
-    elements.promptInput.focus();
-    return false;
-  }
-  if (prompt.length > MAX_PROMPT_CHARS) {
-    toast("问题太长");
-    return false;
-  }
-  try {
-    await navigator.clipboard.writeText(prompt);
-  } catch (_) {
-    const helper = document.createElement("textarea");
-    helper.value = prompt;
-    document.body.appendChild(helper);
-    helper.select();
-    document.execCommand("copy");
-    helper.remove();
-  }
-  elements.copyButton.textContent = "已复制";
-  setTimeout(() => { elements.copyButton.textContent = "复制问题"; }, 1500);
-  return true;
-}
-
-function addHistory(provider) {
-  state.history.unshift({
-    id: Date.now().toString(36),
-    provider: provider.name,
-    prompt: state.prompt.trim().slice(0, 1200),
-    createdAt: new Date().toISOString()
-  });
-  state.history = state.history.slice(0, MAX_HISTORY);
-  persistHistory();
+function saveHistory(prompt, providers) {
+  state.history.unshift({ prompt: prompt.slice(0, 1200), providers, createdAt: new Date().toISOString() });
+  state.history = state.history.slice(0, 20);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history));
   renderHistory();
 }
-
-function openProvider(provider) {
-  copyPrompt().then((copied) => {
-    if (!copied) return;
-    addHistory(provider);
-    window.open(provider.url, "_blank", "noopener,noreferrer");
-    toast(provider.name + " 已打开，粘贴问题即可");
-  });
-}
-
-function renderProviders() {
-  elements.providerGrid.replaceChildren();
-  for (const provider of PROVIDERS) {
-    const card = document.createElement("article");
-    card.className = "provider-card";
-    const info = document.createElement("div");
-    info.innerHTML = "<div class=\"provider-name\"></div><div class=\"provider-state\"></div>";
-    info.querySelector(".provider-name").textContent = provider.name;
-    info.querySelector(".provider-state").textContent = provider.note;
-    const button = document.createElement("button");
-    button.className = "small-button login";
-    button.type = "button";
-    button.textContent = "复制并打开";
-    button.addEventListener("click", () => openProvider(provider));
-    card.append(info, button);
-    elements.providerGrid.appendChild(card);
-  }
-  elements.providerCount.textContent = String(PROVIDERS.length);
-}
-
-function formatTime(value) {
-  try {
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
-  } catch (_) { return ""; }
-}
-
 function renderHistory() {
-  elements.historyList.replaceChildren();
-  elements.historyCount.textContent = String(state.history.length);
-  if (!state.history.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty-state";
-    empty.textContent = "还没有打开记录";
-    elements.historyList.appendChild(empty);
-    return;
-  }
+  el.history.replaceChildren();
+  if (!state.history.length) { const empty = document.createElement("div"); empty.className = "empty-state"; empty.textContent = "还没有询问记录"; el.history.appendChild(empty); return; }
   for (const item of state.history) {
-    const card = document.createElement("article");
-    card.className = "history-item";
-    card.innerHTML = "<div><div class=\"history-prompt\"></div><div class=\"history-meta\"></div></div><button class=\"small-button\">再次复制</button>";
-    card.querySelector(".history-prompt").textContent = item.prompt;
-    card.querySelector(".history-meta").textContent = item.provider + " · " + formatTime(item.createdAt);
-    card.querySelector("button").addEventListener("click", async () => {
-      elements.promptInput.value = item.prompt;
-      updatePrompt();
-      await copyPrompt();
-      toast("问题已复制");
-    });
-    elements.historyList.appendChild(card);
+    const row = document.createElement("article"); row.className = "history-item";
+    const text = document.createElement("div"); text.innerHTML = "<div class=\"history-prompt\"></div><div class=\"history-meta\"></div>";
+    text.querySelector(".history-prompt").textContent = item.prompt;
+    text.querySelector(".history-meta").textContent = item.providers.join("、") + " · " + new Date(item.createdAt).toLocaleString();
+    const button = document.createElement("button"); button.className = "small-button"; button.textContent = "填入";
+    button.addEventListener("click", () => { el.prompt.value = item.prompt; updateCount(); el.prompt.focus(); });
+    row.append(text, button); el.history.appendChild(row);
   }
 }
-
-elements.promptInput.addEventListener("input", updatePrompt);
-elements.copyButton.addEventListener("click", copyPrompt);
-elements.openAllButton.addEventListener("click", async () => {
-  if (!await copyPrompt()) return;
-  for (const provider of PROVIDERS) {
-    window.open(provider.url, "_blank", "noopener,noreferrer");
-  }
-  toast("问题已复制；请逐个粘贴到官方页面");
+async function askProvider(provider, prompt) {
+  const data = await api("/api/guest-ask", { provider, prompt });
+  addResult(data.provider || provider, data.response || "没有返回文字");
+  return data;
+}
+async function run(selected) {
+  if (state.busy) return;
+  const prompt = el.prompt.value.trim();
+  if (!prompt) return toast("请先输入问题");
+  if (!state.token) { el.settings.showModal(); return; }
+  state.busy = true; el.ask.disabled = true; el.askAll.disabled = true; el.results.replaceChildren();
+  const keys = selected === "all" ? PROVIDERS.map((p) => p.key) : [selected === "auto" ? null : selected];
+  const completed = [];
+  try {
+    for (const key of keys) {
+      el.status.textContent = completed.length + " / " + keys.length + " 个 AI";
+      try {
+        const data = await askProvider(key, prompt);
+        completed.push(providerName(data.provider || key || "auto"));
+      } catch (error) {
+        addResult(key || "auto", apiError(error), false);
+        if (error.status === 401) { el.settings.showModal(); break; }
+      }
+    }
+    el.status.textContent = completed.length ? completed.join("、") + " 已完成" : "没有可用访客 AI";
+    saveHistory(prompt, completed.length ? completed : ["无可用访客"]);
+  } finally { state.busy = false; el.ask.disabled = false; el.askAll.disabled = false; }
+}
+el.prompt.addEventListener("input", updateCount);
+el.ask.addEventListener("click", () => run(el.select.value));
+el.askAll.addEventListener("click", () => run("all"));
+el.settingsButton.addEventListener("click", () => { el.token.value = state.token; el.settings.showModal(); });
+el.saveToken.addEventListener("click", async () => {
+  const candidate = el.token.value.trim(); if (!candidate) return toast("请先输入访问令牌");
+  state.token = candidate; el.saveToken.disabled = true;
+  try { await api("/api/browser/status", {}); sessionStorage.setItem(TOKEN_KEY, candidate); el.settings.close(); toast("访问令牌验证成功"); }
+  catch (error) { state.token = ""; toast(apiError(error)); }
+  finally { el.saveToken.disabled = false; }
 });
-elements.clearHistoryButton.addEventListener("click", () => {
-  if (!state.history.length || confirm("清除本机历史记录？")) {
-    state.history = [];
-    persistHistory();
-    renderHistory();
-    toast("本机历史已清除");
-  }
-});
-elements.helpButton.addEventListener("click", () => elements.helpDialog.showModal());
-document.querySelectorAll(".nav-item").forEach((button) => {
-  button.addEventListener("click", () => document.querySelector(button.dataset.target)?.scrollIntoView({ behavior: "smooth" }));
-});
-renderProviders();
-renderHistory();
-updatePrompt();
+el.clear.addEventListener("click", () => { if (confirm("清除本机历史记录？")) { state.history = []; localStorage.removeItem(HISTORY_KEY); renderHistory(); } });
+document.querySelectorAll(".nav-item").forEach((b) => b.addEventListener("click", () => document.querySelector(b.dataset.target)?.scrollIntoView({ behavior: "smooth" })));
+for (const p of PROVIDERS) { const o = document.createElement("option"); o.value = p.key; o.textContent = p.name + "（访客）"; el.select.appendChild(o); }
+updateCount(); renderHistory();
