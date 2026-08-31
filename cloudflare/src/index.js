@@ -197,6 +197,7 @@ export default {
         ["/api/provider/save-auth", "/save-auth"],
         ["/api/provider/clear-auth", "/clear-auth"],
         ["/api/ask", "/ask"],
+        ["/api/guest-ask", "/guest-ask"],
         ["/api/compare", "/compare"]
       ]);
       const internal = routes.get(url.pathname);
@@ -473,8 +474,39 @@ export class AgentChatBrowser extends DurableObject {
   async askOne(provider, prompt) {
     const page = await this.providerPage(provider);
     const result = await runProvider(page, provider, prompt);
-    await this.persistAuthState().catch(() => {});
+    if (result.access !== "guest") await this.persistAuthState().catch(() => {});
     return result;
+  }
+
+  async guestAskOne(provider, prompt) {
+    const browser = await this.ensureBrowser();
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      return await runProvider(page, provider, prompt);
+    } finally {
+      await context.close().catch(() => {});
+    }
+  }
+
+  async guestAsk(prompt, providerKey) {
+    const providers = providerKey && providerKey !== "auto"
+      ? [getProvider(providerKey)]
+      : CLOUD_PROVIDERS;
+    if (providers.some((provider) => !provider || !provider.cloudEnabled)) {
+      throw createError("Provider is not enabled in Cloud v0.2", "PROVIDER_NOT_ENABLED");
+    }
+
+    const attempts = [];
+    for (const provider of providers) {
+      try {
+        const result = await this.guestAskOne(provider, prompt);
+        return { ...result, mode: "guest", attempts };
+      } catch (error) {
+        attempts.push({ provider: provider.key, ...serializeError(error) });
+      }
+    }
+    throw createError("No guest provider is currently available", "ALL_PROVIDERS_FAILED", attempts);
   }
 
   async askAuto(prompt) {
@@ -581,6 +613,11 @@ export class AgentChatBrowser extends DurableObject {
 
       if (url.pathname === "/clear-auth" && request.method === "POST") {
         return json(await this.clearAuthState());
+      }
+
+      if (url.pathname === "/guest-ask" && request.method === "POST") {
+        const prompt = normalizePrompt(body.prompt);
+        return json(await this.guestAsk(prompt, body.provider));
       }
 
       if (url.pathname === "/ask" && request.method === "POST") {
