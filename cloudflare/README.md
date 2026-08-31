@@ -1,43 +1,71 @@
-# AgentChat Free Web Mode
+# AgentChat Cloud · iPhone PWA
 
-AgentChat 是一个手机优先的免费多 AI 网页入口，不使用 AI API，也不保存 Google 密码、验证码或 Cookie。
+AgentChat Cloud 把本地 AgentChat 的网页 AI 编排能力搬到 Cloudflare Browser Run。iPhone 只负责控制、登录和查看结果，远程浏览器负责打开 AI 官方网页、发送任务并读取回答。
 
-## 使用方式
-
-1. 在 AgentChat 输入问题。
-2. 点击某个 AI 的“复制并打开”。
-3. 手机会复制问题并打开 AI 官方网页。
-4. 在官方网页使用 iPhone Apple 密码自动填充、Passkey 或“使用 Google 登录”。
-5. 完成人机验证后，把问题粘贴进去发送。
-
-当前入口：
+当前云端 Provider：
 
 - Gemini
+- ChatGPT
 - Claude
-- DeepSeek
-- 通义千问
+- Qwen
 - Kimi
-- 豆包
+- MiniMax
+- MiMo
+- DeepSeek
 
-## 安全边界
+## 一键部署
 
-- AgentChat 不能读取 iPhone 密码库。
-- 密码自动填充只由 Safari/Apple 密码在官方网页完成。
-- AgentChat 不接触密码、Google 验证码、MFA 或人机验证。
-- 不使用 Cloudflare 远程浏览器，因此不会因为批量启动远程浏览器触发 429。
-- 网页版 AI 的登录状态由手机浏览器自己管理，不会复制到服务器。
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yichaochen225-bot/agentchat/tree/master/cloudflare)
 
-## 部署
+Cloudflare 会从 `cloudflare/` 子目录创建 Worker、Durable Object、Browser Run binding 和静态 PWA 资源。部署页会要求配置运行时 Secret：
 
-项目仍然可以部署到 Cloudflare Workers。`cloudflare/public` 是当前免费网页模式的前端，推送到 `master` 后由 Cloudflare Workers Builds 或 GitHub Actions 部署。
+- `AGENTCHAT_API_TOKEN`：至少 32 个字符的私有随机字符串。部署后在 iPhone AgentChat 设置中输入同一个值，用来保护控制 API。
+- `AUTH_STATE_KEY`：另一个不同的至少 32 字符随机字符串，用来 AES-GCM 加密保存浏览器登录状态。
+- `MCP_API_TOKEN`：可选，仅使用 MCP 时设置。
 
-Cloudflare Workers Builds 设置：
+这些 Secret 不是 Google、OpenAI、Anthropic 或其他 AI 的账号密码。
 
+## iPhone 使用
+
+1. 打开部署完成后的 `*.workers.dev` 地址。
+2. 输入部署时设置的 `AGENTCHAT_API_TOKEN`。
+3. 打开“账户”，对需要登录的 AI 点击“登录”。
+4. 在远程官方网页完成登录、MFA、验证码或其他人类验证。
+5. 返回 AgentChat，检测状态并点击“加密保存当前登录”。
+6. 在“询问”中选择“已登录会话”或“访客模式”，然后指定一个 AI、自动 fallback，或依次询问全部 AI。
+7. Safari → 共享 → 添加到主屏幕，即可作为 PWA 独立运行。
+
+## Passkey 与安全边界
+
+- AgentChat 不读取 iPhone 密码库，也不会获得 Passkey 私钥。
+- iPhone 上的设备 Passkey 不能直接注入 Cloudflare 的远程浏览器会话。
+- 如果 AI/Google 登录页提供跨设备 Passkey 流程，可以使用官方流程；否则请使用该登录页提供的其他官方认证方式。
+- CAPTCHA、人类验证和 MFA 必须由用户本人完成；项目不尝试绕过它们。
+- 登录完成后，AgentChat 只持久化浏览器 storage state，并使用 `AUTH_STATE_KEY` 加密后写入 Durable Object storage。
+- PWA 中的 AgentChat 访问令牌只存放在 `sessionStorage`，关闭会话后需要重新输入。
+
+## Cloudflare 免费额度
+
+Browser Run 可用于 Workers Free 和 Paid。Free 当前包含每天 10 分钟 Browser Run 时间和最多 3 个并发 Browser Sessions；长时间运行 8 个 AI 很容易消耗完免费额度。Paid 当前包含每月 10 小时，超出部分按 Browser Run 定价计费。
+
+项目复用一个 Browser 实例并为不同 Provider 开标签页，以降低启动频率和并发开销。
+
+## Cloudflare Workers Builds
+
+如果不使用上面的一键部署，也可以把当前 GitHub 仓库直接连接到 Cloudflare Workers Builds：
+
+- Repository: `yichaochen225-bot/agentchat`
 - Root directory: `cloudflare`
-- Build command: `None`
+- Build command: 留空
 - Deploy command: `npx wrangler deploy`
 - Production branch: `master`
 
-## 重要限制
+GitHub Actions 仍会执行语法检查和单元测试。如果仓库配置了 `CLOUDFLARE_API_TOKEN` 与 `CLOUDFLARE_ACCOUNT_ID`，Actions 也会直接部署；没有配置时只跳过部署步骤，不会把测试标成失败。
 
-不使用 API 时，网页无法安全地跨域读取各 AI 的对话内容，也不能代替用户点击发送、处理 CAPTCHA 或绕过登录保护。因此当前设计是“复制问题 + 打开官方页面 + 手机自动填充”，这是免费网页方案中安全且可靠的边界。
+## 本地检查
+
+```bash
+cd cloudflare
+npm install
+npm run check
+```
