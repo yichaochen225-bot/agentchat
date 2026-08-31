@@ -29,14 +29,14 @@ function hostMatches(hostname, patterns = []) {
 
 export async function probeProvider(page, provider) {
   await page.goto(provider.url, { waitUntil: "domcontentloaded", timeout: 45000 });
-  await page.waitForTimeout(1800);
+  await page.waitForTimeout(provider.settleMs || 1800);
 
   const current = new URL(page.url());
   const onProvider = hostMatches(current.hostname, provider.hosts || []);
   const onAuth = hostMatches(current.hostname, provider.authHosts || [])
     || (provider.authPathPatterns || []).some((pattern) => pattern.test(current.pathname));
   const signedOut = await isAnyVisible(page, provider.signedOutSelectors || []);
-  const editor = onProvider ? await firstVisible(page, provider.editorSelectors || [], 900) : null;
+  const editor = onProvider ? await firstVisible(page, provider.editorSelectors || [], 1100) : null;
 
   let state = "unknown";
   if (editor && signedOut) state = "guest";
@@ -143,7 +143,7 @@ export async function runProvider(page, provider, prompt) {
     error.details = status;
     throw error;
   }
-  if (status.state !== "ready") {
+  if (status.state !== "ready" && status.state !== "guest") {
     const error = new Error(`${provider.name} editor was not found; the page may have changed`);
     error.code = "EDITOR_NOT_FOUND";
     error.details = status;
