@@ -10,6 +10,7 @@ const IDLE_CLOSE_MS = 5 * 60 * 1000;
 const MAX_API_BODY_BYTES = 96 * 1024;
 const MAX_PROMPT_CHARS = 12000;
 const MAX_COMPARE_PROVIDERS = 3;
+const BROWSER_RETRY_AFTER_MS = 60 * 1000;
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -44,6 +45,7 @@ function errorStatus(code) {
     COMPARE_NO_PROVIDERS: 400,
     REQUEST_TOO_LARGE: 413,
     AUTH_REQUIRED: 409,
+    BROWSER_RATE_LIMITED: 429,
     PROVIDER_NOT_ENABLED: 400,
     ALL_PROVIDERS_FAILED: 502,
     RESPONSE_TIMEOUT: 504
@@ -218,18 +220,41 @@ export class AgentChatBrowser extends DurableObject {
     this.pages = new Map();
     this.pagePromises = new Map();
     this.lastUseAt = 0;
+    this.browserBlockedUntil = 0;
   }
 
   async ensureBrowser() {
     if (this.browser && this.browser.isConnected()) return this.browser;
     if (this.browserPromise) return this.browserPromise;
 
+    const retryAfterMs = this.browserBlockedUntil - Date.now();
+    if (retryAfterMs > 0) {
+      throw createError(
+        "Cloudflare Browser Run 暂时达到速率限制，请稍后再试",
+        "BROWSER_RATE_LIMITED",
+        { retryAfterMs }
+      );
+    }
+
     this.browserPromise = launch(this.env.BROWSER, { keep_alive: 600000 })
       .then((browser) => {
         this.browser = browser;
+        this.browserBlockedUntil = 0;
         this.context = null;
         this.pages.clear();
         return browser;
+      })
+      .catch((error) => {
+        const message = String(error?.message || error);
+        if (/429|rate.?limit|too many requests|quota/i.test(message)) {
+          this.browserBlockedUntil = Date.now() + BROWSER_RETRY_AFTER_MS;
+          throw createError(
+            "Cloudflare Browser Run 暂时达到速率限制，请等待约 1 分钟",
+            "BROWSER_RATE_LIMITED",
+            { retryAfterMs: BROWSER_RETRY_AFTER_MS }
+          );
+        }
+        throw error;
       })
       .finally(() => {
         this.browserPromise = null;
