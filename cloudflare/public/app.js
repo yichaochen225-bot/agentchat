@@ -16,7 +16,9 @@ const state = {
   compareSelectionInitialized: false,
   history: readHistory(),
   busy: false,
-  lastResultText: ""
+  lastResultText: "",
+  cooldownUntil: 0,
+  cooldownTimer: null
 };
 
 const elements = {
@@ -104,11 +106,48 @@ function showDialog(dialog) {
   if (dialog && !dialog.open) dialog.showModal();
 }
 
+function startRateLimitCooldown(retryAfterMs = 60000) {
+  const duration = Math.max(10000, Number(retryAfterMs) || 60000);
+  state.cooldownUntil = Date.now() + duration;
+  clearInterval(state.cooldownTimer);
+
+  const update = () => {
+    const remaining = Math.max(0, state.cooldownUntil - Date.now());
+    const seconds = Math.ceil(remaining / 1000);
+    if (elements.batchLoginButton) {
+      elements.batchLoginButton.disabled = remaining > 0;
+      elements.batchLoginButton.textContent = remaining > 0
+        ? "浏览器冷却中 · " + seconds + "秒"
+        : "一键准备 Google 授权";
+    }
+    if (!remaining) {
+      clearInterval(state.cooldownTimer);
+      state.cooldownTimer = null;
+    }
+  };
+
+  update();
+  state.cooldownTimer = setInterval(update, 1000);
+}
+
+function isRateLimited() {
+  if (Date.now() < state.cooldownUntil) {
+    const seconds = Math.ceil((state.cooldownUntil - Date.now()) / 1000);
+    toast("Cloudflare 浏览器冷却中，请等待约 " + seconds + " 秒");
+    return true;
+  }
+  return false;
+}
+
 function apiErrorMessage(error) {
   if (error.status === 401 || error.code === "UNAUTHORIZED") {
     return "AgentChat 访问令牌未通过验证；这不是 AI Provider 的登录错误";
   }
   if (error.code === "AUTH_REQUIRED") return "这个 AI 还没有登录，请先点对应 Provider 的“登录”";
+  if (error.code === "BROWSER_RATE_LIMITED") {
+    const seconds = Math.max(1, Math.ceil(Number(error.details?.retryAfterMs || 60000) / 1000));
+    return "Cloudflare 浏览器暂时达到速率限制，请等待约 " + seconds + " 秒；程序已自动暂停重复请求";
+  }
   if (error.code === "EDITOR_NOT_FOUND" || error.code === "PAGE_CHANGED") {
     return "AI 网页结构发生变化，暂时找不到输入框";
   }
@@ -134,6 +173,9 @@ async function api(path, options = {}) {
     error.code = data.code;
     error.details = data.details;
     error.status = response.status;
+    if (error.code === "BROWSER_RATE_LIMITED" || response.status === 429) {
+      startRateLimitCooldown(error.details?.retryAfterMs || 60000);
+    }
     throw error;
   }
   return data;
@@ -591,7 +633,7 @@ async function copyText(value) {
   }
 }
 
-async function checkProvider(key) {
+async function checkProvider(key) {\n  if (isRateLimited()) return;
   if (!state.token) {
     requestToken();
     return;
@@ -615,7 +657,7 @@ async function checkProvider(key) {
   }
 }
 
-async function openLogin(key) {
+async function openLogin(key) {\n  if (isRateLimited()) return;
   if (!state.token) {
     requestToken();
     return;
@@ -674,7 +716,7 @@ function renderBatchLoginLinks(sessions) {
   elements.batchLoginLinks.classList.remove("hidden");
 }
 
-async function prepareBatchLogin() {
+async function prepareBatchLogin() {\n  if (isRateLimited()) return;
   if (!state.token) {
     requestToken();
     return;
@@ -761,7 +803,7 @@ async function saveLogin() {
   }
 }
 
-async function refreshCloudProviders() {
+async function refreshCloudProviders() {\n  if (isRateLimited()) return;
   if (!state.token) {
     requestToken();
     return;
@@ -771,7 +813,10 @@ async function refreshCloudProviders() {
   elements.refreshProviders.disabled = true;
   elements.refreshProviders.textContent = "检测中…";
   try {
-    await Promise.all(providers.map((provider) => checkProvider(provider.key)));
+    for (const provider of providers) {
+      await checkProvider(provider.key);
+      if (isRateLimited()) break;
+    }
   } finally {
     elements.refreshProviders.disabled = false;
     elements.refreshProviders.textContent = "刷新";
